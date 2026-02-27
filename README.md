@@ -4,17 +4,28 @@ Herramienta para generar heightmaps a partir de texturas de Pokémon (o cualquie
 Detecta regiones de color, permite asignar alturas individuales, y exporta un grayscale PNG
 listo para usar como displacement map en Blender.
 
-## Setup rápido
+## Setup rápido (versión React — recomendada)
 
 ```bash
 # 1. Instalar dependencias
+npm install
+
+# 2. Modo desarrollo (hot-reload)
+npm run dev
+# → http://localhost:5173
+
+# 3. Build de producción
+npm run build
+npm run preview
+# → http://localhost:4173
+```
+
+## Setup alternativo (versión HTML original)
+
+```bash
 pip install -r requirements.txt
-
-# 2. Ejecutar
 python server.py
-
-# 3. Abrir en el navegador
-# http://localhost:8000
+# → http://localhost:8000
 ```
 
 ## Uso

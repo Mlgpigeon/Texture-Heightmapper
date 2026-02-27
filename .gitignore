@@ -1,4 +1,21 @@
-./__pycache__/
-./processors/__pycache__/
-*.pyc
-./node_modules/
+# dependencies
+node_modules/
+**/node_modules/
+
+__pycache__/
+**/__pycache__/
+processors/__pycache__/
+
+# build
+dist/
+build/
+
+# logs
+*.log
+
+# env
+.env
+.env.*
+
+# misc
+.DS_Store
