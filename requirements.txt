@@ -1,0 +1,4 @@
+# No dependencies needed!
+# All processing now runs client-side in the browser.
+# Just run: python server.py
+# Or: cd static && python -m http.server 8000

@@ -1,0 +1,1241 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Heightmap Studio</title>
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0d0d1a; --surface: #111128; --surface2: #1a1a2e;
+    --border: #222; --border2: #333; --text: #e0e0e0;
+    --text2: #aaa; --text3: #666; --accent: #7c6cf0;
+    --success: #22c55e; --danger: #ef4444;
+  }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'Segoe UI', -apple-system, sans-serif;
+    padding: 16px; min-height: 100vh;
+  }
+  .container { max-width: 1400px; margin: 0 auto; }
+  h1 { font-size: 20px; font-weight: 700; color: #fff; }
+  .subtitle { font-size: 12px; color: var(--text3); margin: 4px 0 16px; }
+
+  /* Upload */
+  .upload-zone {
+    border: 2px dashed var(--border2); border-radius: 12px;
+    padding: 50px 20px; text-align: center; cursor: pointer;
+    background: var(--surface); transition: border-color 0.2s;
+  }
+  .upload-zone:hover, .upload-zone.dragover { border-color: var(--accent); }
+  .upload-zone .icon { font-size: 40px; margin-bottom: 8px; }
+  .upload-zone .label { font-size: 14px; color: var(--text2); }
+  .upload-zone .hint { font-size: 11px; color: var(--text3); margin-top: 4px; }
+
+  /* Image bar */
+  .image-bar {
+    display: flex; gap: 6px; align-items: center; margin-bottom: 10px;
+    padding: 6px; background: var(--surface); border-radius: 8px;
+    border: 1px solid var(--border); overflow-x: auto;
+  }
+  .image-thumb {
+    position: relative; flex-shrink: 0; width: 72px; height: 72px;
+    border-radius: 6px; border: 2px solid var(--border2); cursor: pointer;
+    overflow: hidden; transition: border-color 0.15s;
+  }
+  .image-thumb:hover { border-color: var(--text3); }
+  .image-thumb.active { border-color: var(--accent); box-shadow: 0 0 8px rgba(124,108,240,0.3); }
+  .image-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .image-thumb .thumb-label {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    font-size: 9px; color: #fff; background: rgba(0,0,0,0.7);
+    padding: 1px 4px; text-align: center; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .image-thumb .thumb-badge {
+    position: absolute; top: 2px; right: 2px;
+    font-size: 8px; color: #fff; background: var(--accent);
+    padding: 0 4px; border-radius: 8px; line-height: 14px;
+  }
+  .image-thumb .thumb-close {
+    position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+    font-size: 10px; color: #fff; background: rgba(239,68,68,0.8);
+    border: none; border-radius: 50%; cursor: pointer; display: none;
+    align-items: center; justify-content: center; line-height: 1;
+  }
+  .image-thumb:hover .thumb-close { display: flex; }
+  .add-image-btn {
+    flex-shrink: 0; width: 72px; height: 72px; border-radius: 6px;
+    border: 2px dashed var(--border2); background: transparent;
+    color: var(--text3); font-size: 24px; cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 2px;
+  }
+  .add-image-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .add-image-btn .add-label { font-size: 8px; }
+
+  /* Layout */
+  .layout { display: none; gap: 16px; flex-wrap: wrap; }
+  .layout.visible { display: flex; }
+  .col-left { flex: 1 1 600px; min-width: 360px; }
+  .col-right { flex: 1 1 400px; min-width: 320px; max-height: calc(100vh - 80px); overflow-y: auto; }
+
+  /* Panel */
+  .panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px; margin-bottom: 12px;
+  }
+  .panel-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border2); }
+  .tab {
+    padding: 6px 14px; font-size: 12px; background: transparent;
+    border: 1px solid transparent; border-bottom: 1px solid var(--border2);
+    border-radius: 6px 6px 0 0; cursor: pointer; color: var(--text3);
+  }
+  .tab.active {
+    background: #2a2a4a; border-color: #444;
+    border-bottom-color: #2a2a4a; color: #fff; font-weight: 600;
+  }
+  .tab:hover:not(.active) { color: var(--text2); }
+
+  /* Canvas */
+  .canvas-wrap {
+    background: var(--surface); border-radius: 0 0 8px 8px;
+    padding: 8px; border: 1px solid var(--border); border-top: none;
+  }
+  .canvas-container { position: relative; }
+  .canvas-container canvas {
+    width: 100%; height: auto; border-radius: 4px; display: block;
+    background: repeating-conic-gradient(#222 0% 25%, #1a1a1a 0% 50%) 50% / 16px 16px;
+  }
+  .canvas-info {
+    display: flex; justify-content: space-between;
+    font-size: 11px; color: var(--text3); margin-top: 4px;
+  }
+
+  /* Controls */
+  .ctrl { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  .ctrl label { font-size: 12px; color: var(--text2); width: 130px; flex-shrink: 0; }
+  .ctrl input[type=range] { flex: 1; accent-color: var(--accent); }
+  .ctrl .val { font-size: 11px; color: var(--text3); width: 40px; text-align: right; }
+  .ctrl select {
+    flex: 1; background: var(--surface2); color: var(--text);
+    border: 1px solid var(--border2); border-radius: 4px; padding: 4px 8px; font-size: 12px;
+  }
+
+  /* Buttons */
+  .btn {
+    width: 100%; border: none; border-radius: 6px; padding: 10px;
+    font-size: 13px; font-weight: 600; cursor: pointer; color: #fff;
+    transition: opacity 0.15s;
+  }
+  .btn:hover { opacity: 0.9; }
+  .btn:disabled { opacity: 0.5; cursor: wait; }
+  .btn-accent { background: var(--accent); }
+  .btn-success { background: var(--success); }
+  .btn-sm {
+    width: auto; background: var(--surface2); border: 1px solid var(--border2);
+    color: var(--text2); border-radius: 4px; padding: 3px 10px; font-size: 10px;
+    cursor: pointer;
+  }
+  .btn-sm:hover { border-color: var(--accent); color: var(--text); }
+  .btn-link {
+    background: none; border: none; color: var(--text3);
+    font-size: 11px; cursor: pointer; width: auto; padding: 4px 8px;
+  }
+
+  /* Region list */
+  .region-scroll { max-height: 500px; overflow-y: auto; }
+  .region-row {
+    display: flex; align-items: center; gap: 8px; padding: 5px 8px;
+    border-radius: 6px; transition: background 0.1s;
+    border-left: 3px solid transparent; cursor: default;
+  }
+  .region-row:hover, .region-row.hovered { background: var(--surface2); }
+  .region-row.merge-selected { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .region-num {
+    font-size: 11px; font-weight: 700; color: #fff; background: var(--surface2);
+    border: 1px solid var(--border2); border-radius: 4px;
+    width: 28px; height: 24px; display: flex; align-items: center;
+    justify-content: center; flex-shrink: 0;
+  }
+  .swatch { width: 26px; height: 26px; border-radius: 4px; flex-shrink: 0; border: 1px solid #555; }
+  .area-pct { font-size: 10px; color: var(--text3); width: 38px; text-align: right; flex-shrink: 0; }
+  .region-row input[type=range] { flex: 1; min-width: 60px; }
+  .region-row input[type=number] {
+    width: 44px; background: var(--surface2); color: var(--text);
+    border: 1px solid var(--border2); border-radius: 4px;
+    padding: 3px 4px; font-size: 11px; text-align: center;
+  }
+
+  /* Presets */
+  .presets { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 8px; }
+
+  /* Merge bar */
+  .merge-bar {
+    display: flex; align-items: center; gap: 8px; padding: 8px;
+    background: var(--surface2); border-radius: 6px; margin-bottom: 8px;
+    border: 1px solid var(--accent); font-size: 12px;
+  }
+  .merge-bar .info { flex: 1; color: #ccc; }
+
+  /* Processor selector */
+  .proc-desc { font-size: 11px; color: var(--text3); margin: 4px 0 10px; }
+
+  /* Loading */
+  .loading-overlay {
+    position: absolute; inset: 0; background: rgba(13,13,26,0.8);
+    display: none; align-items: center; justify-content: center;
+    border-radius: 8px; font-size: 14px; color: var(--text2);
+  }
+  .loading-overlay.visible { display: flex; }
+
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: var(--surface2); border: 1px solid var(--border2);
+    padding: 8px 20px; border-radius: 6px; font-size: 13px;
+    color: var(--text); z-index: 999; opacity: 0; transition: opacity 0.3s;
+    pointer-events: none;
+  }
+  .toast.visible { opacity: 1; }
+
+  /* Performance badge */
+  .perf-badge {
+    font-size: 10px; color: var(--success); background: rgba(34,197,94,0.1);
+    padding: 2px 8px; border-radius: 10px; margin-left: 8px;
+  }
+
+  /* Show numbers toggle */
+  .toggle-row {
+    display: flex; align-items: center; gap: 6px; margin-bottom: 8px;
+    font-size: 11px; color: var(--text2);
+  }
+  .toggle-row input[type=checkbox] { accent-color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <h1>Heightmap Studio</h1>
+  <p class="subtitle">Deteccion de regiones &rarr; Asignacion de alturas &rarr; Heightmap listo para displacement</p>
+
+  <!-- Upload -->
+  <div class="upload-zone" id="uploadZone">
+    <div class="icon">&#128444;&#65039;</div>
+    <div class="label">Arrastra texturas aqui o haz click para seleccionar</div>
+    <div class="hint">PNG, JPG &mdash; cualquier tamano. Puedes cargar varias imagenes. Procesamiento 100% local.</div>
+  </div>
+  <input type="file" id="fileInput" accept="image/*" multiple hidden>
+
+  <!-- Main layout (hidden until image loaded) -->
+  <div class="layout" id="mainLayout">
+    <div class="col-left">
+      <!-- Image bar -->
+      <div class="image-bar" id="imageBar">
+        <button class="add-image-btn" id="btnAddImage" title="Agregar imagen">
+          <span>+</span>
+          <span class="add-label">Agregar</span>
+        </button>
+      </div>
+
+      <div class="tabs" id="tabBar">
+        <button class="tab active" data-mode="original">Original</button>
+        <button class="tab" data-mode="regions" id="tabRegions" style="display:none">Regiones</button>
+        <button class="tab" data-mode="heightmap" id="tabHeightmap" style="display:none">Heightmap</button>
+        <div style="flex:1"></div>
+        <button class="btn-link" id="btnRemoveImage">&#10005; Quitar imagen</button>
+      </div>
+      <div class="canvas-wrap">
+        <div class="canvas-container">
+          <canvas id="mainCanvas"></canvas>
+          <div class="loading-overlay" id="loadingOverlay">
+            <span id="loadingMsg">Procesando...</span>
+          </div>
+        </div>
+        <div class="canvas-info">
+          <span id="infoFile">&mdash;</span>
+          <span id="infoRegions"></span>
+        </div>
+      </div>
+      <button class="btn btn-accent" id="btnDownload" style="margin-top:8px; display:none">
+        Descargar Heightmap PNG
+      </button>
+    </div>
+
+    <div class="col-right">
+      <!-- Detection controls -->
+      <div class="panel">
+        <div class="panel-title">Algoritmo de deteccion</div>
+        <select id="procSelect" style="width:100%;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:4px;padding:6px 8px;font-size:12px;margin-bottom:6px">
+          <option value="connected" selected>Componentes Conectados</option>
+          <option value="color_cluster">Clustering por Color</option>
+        </select>
+        <div class="proc-desc" id="procDesc">Detecta regiones por color + proximidad espacial.</div>
+
+        <div id="paramsContainer"></div>
+
+        <div style="margin:10px 0 6px;padding-top:8px;border-top:1px solid var(--border2);">
+          <span style="font-size:11px;color:var(--text3);font-weight:600;">Preprocesado</span>
+        </div>
+        <div class="ctrl">
+          <label>Suavizado previo</label>
+          <input type="range" min="0" max="9" step="1" value="3" id="param__pre_blur">
+          <span class="val" id="val__pre_blur">3</span>
+        </div>
+        <div class="ctrl">
+          <label>Suavizado de regiones</label>
+          <input type="range" min="0" max="15" step="1" value="5" id="param__label_smooth">
+          <span class="val" id="val__label_smooth">5</span>
+        </div>
+
+        <button class="btn btn-accent" id="btnDetect">Detectar Regiones</button>
+      </div>
+
+      <!-- Regions panel -->
+      <div class="panel" id="regionsPanel" style="display:none">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span class="panel-title" style="margin:0" id="regionCount">0 regiones</span>
+          <span id="perfBadge" class="perf-badge" style="display:none"></span>
+        </div>
+
+        <div class="toggle-row">
+          <input type="checkbox" id="chkShowNumbers" checked>
+          <label for="chkShowNumbers">Mostrar numeros en canvas</label>
+        </div>
+
+        <div class="merge-bar" id="mergeBar" style="display:none">
+          <span class="info"><span id="mergeCount">0</span> regiones seleccionadas</span>
+          <button class="btn-sm" id="btnDoMerge" style="border-color:var(--success);color:var(--success)">Fusionar</button>
+          <button class="btn-sm" id="btnCancelMerge">Cancelar</button>
+        </div>
+
+        <div class="presets">
+          <button class="btn-sm" data-preset="light-high">Claro&#8593;</button>
+          <button class="btn-sm" data-preset="dark-high">Oscuro&#8593;</button>
+          <button class="btn-sm" data-preset="by-area">Por area</button>
+          <button class="btn-sm" data-preset="flat">Plano</button>
+          <div style="flex:1"></div>
+          <button class="btn-sm" id="btnMerge" style="border-color:var(--accent);color:var(--accent)">Fusionar</button>
+        </div>
+
+        <div class="region-scroll" id="regionList"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+// ═══════════════════════════════════════════════════════════════
+// MULTI-IMAGE STATE
+// ═══════════════════════════════════════════════════════════════
+
+// Each image gets its own state object
+function createImageState(filename, imgRGBA, width, height, thumbUrl) {
+  return {
+    filename,
+    imgRGBA,         // Uint8ClampedArray
+    imgWidth: width,
+    imgHeight: height,
+    thumbUrl,        // data URL for thumbnail
+    labelMap: null,  // Int32Array
+    regions: [],     // [{id, color, pixelCount, bbox, height}, ...]
+    viewMode: 'original',
+    hoveredId: null,
+    mergeMode: false,
+    mergeSelection: [],
+    processor: 'connected',
+    paramValues: {},
+    preBlur: 3,
+    labelSmooth: 5,
+  };
+}
+
+const images = [];     // array of image states
+let activeIdx = -1;    // index of currently active image
+
+// Shortcut to get active image state
+function A() { return activeIdx >= 0 ? images[activeIdx] : null; }
+
+// Processor parameter definitions
+const PROCESSORS = {
+  connected: {
+    name: 'Componentes Conectados',
+    desc: 'Detecta regiones por color + proximidad espacial. Mismo color en zonas separadas = regiones distintas.',
+    params: [
+      { key: 'tolerance', label: 'Tolerancia de color', type: 'range', min: 5, max: 80, step: 1, default: 30 },
+      { key: 'min_region_pct', label: 'Region minima (%)', type: 'range', min: 0.05, max: 5, step: 0.05, default: 0.5 },
+      { key: 'connectivity', label: 'Conectividad', type: 'select', options: [{v:4,l:'4-vecinos'},{v:8,l:'8-vecinos'}], default: 4 },
+    ],
+  },
+  color_cluster: {
+    name: 'Clustering por Color',
+    desc: 'Agrupa pixeles solo por color (ignora posicion). Todos los pixeles del mismo color = misma region.',
+    params: [
+      { key: 'tolerance', label: 'Tolerancia de color', type: 'range', min: 5, max: 80, step: 1, default: 35 },
+      { key: 'min_region_pct', label: 'Region minima (%)', type: 'range', min: 0.1, max: 5, step: 0.1, default: 0.5 },
+      { key: 'max_samples', label: 'Muestras', type: 'range', min: 5000, max: 100000, step: 5000, default: 30000 },
+    ],
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════
+// DOM REFERENCES
+// ═══════════════════════════════════════════════════════════════
+const $ = id => document.getElementById(id);
+const uploadZone = $('uploadZone');
+const fileInput = $('fileInput');
+const mainLayout = $('mainLayout');
+const mainCanvas = $('mainCanvas');
+const ctx = mainCanvas.getContext('2d', { willReadFrequently: true });
+const loadingOverlay = $('loadingOverlay');
+const loadingMsg = $('loadingMsg');
+const regionList = $('regionList');
+const regionsPanel = $('regionsPanel');
+const imageBar = $('imageBar');
+
+// ═══════════════════════════════════════════════════════════════
+// WEB WORKER
+// ═══════════════════════════════════════════════════════════════
+const worker = new Worker('worker.js');
+
+worker.onmessage = function(e) {
+  const msg = e.data;
+  const s = A();
+  if (!s) return;
+
+  if (msg.type === 'result') {
+    s.labelMap = new Int32Array(msg.labelMap);
+    s.regions = msg.regions;
+    hideLoading();
+    showRegionTabs();
+    s.viewMode = 'regions';
+    setActiveTab('regions');
+    renderView();
+    buildRegionList();
+    updateThumbBadge(activeIdx);
+    $('perfBadge').style.display = '';
+    $('perfBadge').textContent = msg.elapsed + 'ms';
+    toast(s.regions.length + ' regiones detectadas en ' + msg.elapsed + 'ms');
+  } else if (msg.type === 'error') {
+    hideLoading();
+    toast('Error: ' + msg.message);
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════
+// IMAGE LOADING
+// ═══════════════════════════════════════════════════════════════
+
+uploadZone.onclick = () => fileInput.click();
+uploadZone.ondragover = e => { e.preventDefault(); uploadZone.classList.add('dragover'); };
+uploadZone.ondragleave = () => uploadZone.classList.remove('dragover');
+uploadZone.ondrop = e => {
+  e.preventDefault();
+  uploadZone.classList.remove('dragover');
+  const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+  files.forEach(f => loadImage(f));
+};
+fileInput.onchange = e => {
+  const files = Array.from(e.target.files);
+  files.forEach(f => loadImage(f));
+  fileInput.value = '';
+};
+
+$('btnAddImage').onclick = () => fileInput.click();
+
+// Global drag & drop — works even when images are already loaded
+document.addEventListener('dragover', e => {
+  if (uploadZone.style.display !== 'none') return; // upload zone handles its own
+  e.preventDefault();
+  imageBar.style.borderColor = 'var(--accent)';
+});
+document.addEventListener('dragleave', e => {
+  if (e.relatedTarget && document.contains(e.relatedTarget)) return;
+  imageBar.style.borderColor = '';
+});
+document.addEventListener('drop', e => {
+  if (uploadZone.style.display !== 'none') return; // upload zone handles its own
+  e.preventDefault();
+  imageBar.style.borderColor = '';
+  const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+  files.forEach(f => loadImage(f));
+});
+
+function loadImage(file) {
+  const img = new Image();
+  img.onload = () => {
+    // Create thumbnail
+    const thumbCanvas = document.createElement('canvas');
+    const thumbSize = 144;
+    thumbCanvas.width = thumbSize;
+    thumbCanvas.height = thumbSize;
+    const tctx = thumbCanvas.getContext('2d');
+    const scale = Math.max(thumbSize / img.width, thumbSize / img.height);
+    const sw = img.width * scale, sh = img.height * scale;
+    tctx.drawImage(img, (thumbSize - sw) / 2, (thumbSize - sh) / 2, sw, sh);
+    const thumbUrl = thumbCanvas.toDataURL('image/jpeg', 0.7);
+
+    // Get pixel data
+    const tmpCanvas = document.createElement('canvas');
+    tmpCanvas.width = img.width;
+    tmpCanvas.height = img.height;
+    const tmpCtx = tmpCanvas.getContext('2d');
+    tmpCtx.drawImage(img, 0, 0);
+    const imageData = tmpCtx.getImageData(0, 0, img.width, img.height);
+
+    // Initialize default param values for this image
+    const state = createImageState(file.name, imageData.data, img.width, img.height, thumbUrl);
+    const proc = PROCESSORS[state.processor];
+    proc.params.forEach(p => { state.paramValues[p.key] = p.default; });
+
+    images.push(state);
+    const newIdx = images.length - 1;
+
+    // Show layout
+    uploadZone.style.display = 'none';
+    mainLayout.classList.add('visible');
+
+    buildImageBar();
+    switchToImage(newIdx);
+
+    URL.revokeObjectURL(img.src);
+  };
+  img.src = URL.createObjectURL(file);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// IMAGE BAR
+// ═══════════════════════════════════════════════════════════════
+
+function buildImageBar() {
+  // Remove all thumbs (keep the add button)
+  const addBtn = $('btnAddImage');
+  imageBar.innerHTML = '';
+
+  images.forEach((s, idx) => {
+    const thumb = document.createElement('div');
+    thumb.className = 'image-thumb' + (idx === activeIdx ? ' active' : '');
+    thumb.dataset.idx = idx;
+
+    const imgEl = document.createElement('img');
+    imgEl.src = s.thumbUrl;
+    thumb.appendChild(imgEl);
+
+    const label = document.createElement('div');
+    label.className = 'thumb-label';
+    label.textContent = s.filename;
+    thumb.appendChild(label);
+
+    if (s.regions.length > 0) {
+      const badge = document.createElement('div');
+      badge.className = 'thumb-badge';
+      badge.textContent = s.regions.length;
+      thumb.appendChild(badge);
+    }
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'thumb-close';
+    closeBtn.textContent = '\u00d7';
+    closeBtn.onclick = (e) => {
+      e.stopPropagation();
+      removeImage(idx);
+    };
+    thumb.appendChild(closeBtn);
+
+    thumb.onclick = () => switchToImage(idx);
+
+    imageBar.appendChild(thumb);
+  });
+
+  imageBar.appendChild(addBtn);
+}
+
+function updateThumbBadge(idx) {
+  // Quick update without full rebuild
+  const thumbs = imageBar.querySelectorAll('.image-thumb');
+  if (thumbs[idx]) {
+    let badge = thumbs[idx].querySelector('.thumb-badge');
+    const s = images[idx];
+    if (s.regions.length > 0) {
+      if (!badge) {
+        badge = document.createElement('div');
+        badge.className = 'thumb-badge';
+        thumbs[idx].appendChild(badge);
+      }
+      badge.textContent = s.regions.length;
+    } else if (badge) {
+      badge.remove();
+    }
+  }
+}
+
+function switchToImage(idx) {
+  if (idx < 0 || idx >= images.length) return;
+
+  // Save current state from UI controls
+  saveCurrentUIState();
+
+  activeIdx = idx;
+  const s = images[idx];
+
+  // Update canvas
+  mainCanvas.width = s.imgWidth;
+  mainCanvas.height = s.imgHeight;
+
+  // Update info
+  $('infoFile').textContent = s.filename + ' \u2014 ' + s.imgWidth + '\u00d7' + s.imgHeight;
+
+  // Restore processor & params
+  $('procSelect').value = s.processor;
+  buildParamControls(s);
+  $('param__pre_blur').value = s.preBlur;
+  $('val__pre_blur').textContent = s.preBlur;
+  $('param__label_smooth').value = s.labelSmooth;
+  $('val__label_smooth').textContent = s.labelSmooth;
+
+  // Restore view state
+  if (s.regions.length > 0) {
+    showRegionTabs();
+    setActiveTab(s.viewMode);
+    buildRegionList();
+    $('infoRegions').textContent = s.regions.length + ' regiones';
+    $('btnDownload').style.display = '';
+  } else {
+    hideRegionTabs();
+    s.viewMode = 'original';
+    setActiveTab('original');
+    regionsPanel.style.display = 'none';
+    $('infoRegions').textContent = '';
+    $('btnDownload').style.display = 'none';
+  }
+
+  // Merge state
+  s.mergeMode = false;
+  s.mergeSelection = [];
+  $('mergeBar').style.display = 'none';
+
+  renderView();
+
+  // Update active thumb
+  imageBar.querySelectorAll('.image-thumb').forEach((t, i) => {
+    t.classList.toggle('active', i === idx);
+  });
+}
+
+function saveCurrentUIState() {
+  const s = A();
+  if (!s) return;
+  s.processor = $('procSelect').value;
+  s.preBlur = parseInt($('param__pre_blur').value) || 0;
+  s.labelSmooth = parseInt($('param__label_smooth').value) || 0;
+  // paramValues are saved via buildParamControls references
+}
+
+function removeImage(idx) {
+  if (images.length <= 1) {
+    // Last image: reset to upload screen
+    images.splice(0, 1);
+    activeIdx = -1;
+    mainLayout.classList.remove('visible');
+    uploadZone.style.display = '';
+    return;
+  }
+
+  images.splice(idx, 1);
+
+  if (activeIdx === idx) {
+    activeIdx = Math.min(idx, images.length - 1);
+  } else if (activeIdx > idx) {
+    activeIdx--;
+  }
+
+  buildImageBar();
+  switchToImage(activeIdx);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DETECTION
+// ═══════════════════════════════════════════════════════════════
+
+$('btnDetect').onclick = () => {
+  const s = A();
+  if (!s || !s.imgRGBA) return;
+  showLoading('Detectando regiones...');
+
+  saveCurrentUIState();
+
+  const params = { ...s.paramValues };
+  params._pre_blur = s.preBlur;
+  params._label_smooth = s.labelSmooth;
+
+  // Copy pixel data for transfer
+  const rgbaCopy = new Uint8Array(s.imgRGBA.length);
+  rgbaCopy.set(s.imgRGBA);
+
+  worker.postMessage({
+    type: 'detect',
+    processor: s.processor,
+    width: s.imgWidth,
+    height: s.imgHeight,
+    rgba: rgbaCopy.buffer,
+    params,
+  }, [rgbaCopy.buffer]);
+};
+
+// ═══════════════════════════════════════════════════════════════
+// CLIENT-SIDE RENDERING
+// ═══════════════════════════════════════════════════════════════
+
+function renderView(highlightId) {
+  const s = A();
+  if (!s) return;
+  const w = s.imgWidth, h = s.imgHeight;
+  const n = w * h;
+
+  if (s.viewMode === 'original') {
+    const imgData = new ImageData(new Uint8ClampedArray(s.imgRGBA), w, h);
+    ctx.putImageData(imgData, 0, 0);
+    if (highlightId != null && s.labelMap) {
+      renderHighlightOverlay(highlightId);
+    }
+    return;
+  }
+
+  if (!s.labelMap || s.regions.length === 0) return;
+
+  const imgData = ctx.createImageData(w, h);
+  const data = imgData.data;
+  const lm = s.labelMap;
+
+  if (s.viewMode === 'regions') {
+    const maxId = s.regions.reduce((m, r) => Math.max(m, r.id), 0);
+    const lutR = new Uint8Array(maxId + 1);
+    const lutG = new Uint8Array(maxId + 1);
+    const lutB = new Uint8Array(maxId + 1);
+    s.regions.forEach((r, i) => {
+      const c = regionColor(i);
+      lutR[r.id] = c[0]; lutG[r.id] = c[1]; lutB[r.id] = c[2];
+    });
+
+    if (highlightId != null) {
+      for (let i = 0; i < n; i++) {
+        const lab = lm[i];
+        if (lab < 0) continue;
+        const p = i << 2;
+        if (lab === highlightId) {
+          data[p] = 255; data[p+1] = 0; data[p+2] = 255; data[p+3] = 255;
+        } else {
+          data[p] = 40; data[p+1] = 40; data[p+2] = 40; data[p+3] = 255;
+        }
+      }
+    } else {
+      for (let i = 0; i < n; i++) {
+        const lab = lm[i];
+        if (lab < 0) continue;
+        const p = i << 2;
+        data[p] = lutR[lab]; data[p+1] = lutG[lab]; data[p+2] = lutB[lab]; data[p+3] = 255;
+      }
+    }
+  } else if (s.viewMode === 'heightmap') {
+    const maxId = s.regions.reduce((m, r) => Math.max(m, r.id), 0);
+    const lutH = new Uint8Array(maxId + 1).fill(128);
+    s.regions.forEach(r => { lutH[r.id] = r.height; });
+
+    for (let i = 0; i < n; i++) {
+      const lab = lm[i];
+      if (lab < 0) continue;
+      const p = i << 2;
+      const v = lutH[lab];
+      data[p] = v; data[p+1] = v; data[p+2] = v; data[p+3] = 255;
+    }
+  }
+
+  ctx.putImageData(imgData, 0, 0);
+
+  // Draw region numbers on canvas
+  if ($('chkShowNumbers').checked && s.regions.length > 0 && highlightId == null) {
+    drawRegionNumbers(s);
+  }
+}
+
+function renderHighlightOverlay(highlightId) {
+  const s = A();
+  if (!s || !s.labelMap) return;
+  const w = s.imgWidth, h = s.imgHeight, n = w * h;
+  const imgData = ctx.createImageData(w, h);
+  const data = imgData.data;
+  const lm = s.labelMap;
+
+  for (let i = 0; i < n; i++) {
+    const lab = lm[i];
+    if (lab < 0) continue;
+    const p = i << 2;
+    if (lab === highlightId) {
+      data[p] = 255; data[p+1] = 0; data[p+2] = 255; data[p+3] = 255;
+    } else {
+      data[p] = 40; data[p+1] = 40; data[p+2] = 40; data[p+3] = 255;
+    }
+  }
+  ctx.putImageData(imgData, 0, 0);
+
+  // Show the number of the highlighted region
+  if ($('chkShowNumbers').checked) {
+    const idx = s.regions.findIndex(r => r.id === highlightId);
+    if (idx >= 0) {
+      const r = s.regions[idx];
+      const cx = (r.bbox[0] + r.bbox[2]) / 2;
+      const cy = (r.bbox[1] + r.bbox[3]) / 2;
+      drawNumberLabel(idx, cx, cy, s.imgWidth);
+    }
+  }
+}
+
+function drawRegionNumbers(s) {
+  const scale = Math.max(12, Math.min(24, s.imgWidth / 30));
+
+  s.regions.forEach((r, idx) => {
+    const cx = (r.bbox[0] + r.bbox[2]) / 2;
+    const cy = (r.bbox[1] + r.bbox[3]) / 2;
+    drawNumberLabel(idx, cx, cy, s.imgWidth, scale);
+  });
+}
+
+function drawNumberLabel(idx, cx, cy, imgW, scale) {
+  if (!scale) scale = Math.max(12, Math.min(24, imgW / 30));
+  const text = '#' + idx;
+
+  ctx.font = 'bold ' + scale + 'px "Segoe UI", sans-serif';
+  const metrics = ctx.measureText(text);
+  const tw = metrics.width;
+  const th = scale;
+  const pad = scale * 0.3;
+
+  // Background pill
+  ctx.fillStyle = 'rgba(0,0,0,0.75)';
+  const rx = cx - tw / 2 - pad;
+  const ry = cy - th / 2 - pad;
+  const rw = tw + pad * 2;
+  const rh = th + pad * 2;
+  const br = scale * 0.3;
+  ctx.beginPath();
+  ctx.roundRect(rx, ry, rw, rh, br);
+  ctx.fill();
+
+  // Border
+  const hue = regionColor(idx);
+  ctx.strokeStyle = `rgb(${hue[0]},${hue[1]},${hue[2]})`;
+  ctx.lineWidth = Math.max(1, scale / 8);
+  ctx.beginPath();
+  ctx.roundRect(rx, ry, rw, rh, br);
+  ctx.stroke();
+
+  // Text
+  ctx.fillStyle = '#fff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, cx, cy);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// REGION LIST
+// ═══════════════════════════════════════════════════════════════
+
+function buildRegionList() {
+  const s = A();
+  if (!s) return;
+
+  regionsPanel.style.display = '';
+  $('btnDownload').style.display = '';
+  $('regionCount').textContent = s.regions.length + ' regiones';
+  $('infoRegions').textContent = s.regions.length + ' regiones';
+
+  const totalPx = s.regions.reduce((sum, r) => sum + r.pixelCount, 0);
+  const frag = document.createDocumentFragment();
+
+  s.regions.forEach((r, idx) => {
+    const pct = ((r.pixelCount / totalPx) * 100).toFixed(1);
+    const hue = regionColor(idx);
+    const row = document.createElement('div');
+    row.className = 'region-row';
+    row.dataset.rid = r.id;
+    row.style.borderLeftColor = `rgb(${hue[0]},${hue[1]},${hue[2]})`;
+
+    row.innerHTML = `
+      <span class="region-num" style="border-color:rgb(${hue[0]},${hue[1]},${hue[2]})">#${idx}</span>
+      <div class="swatch" style="background:rgb(${r.color[0]},${r.color[1]},${r.color[2]})" title="RGB(${r.color.join(',')})"></div>
+      <span class="area-pct">${pct}%</span>
+      <input type="range" min="0" max="255" value="${r.height}" class="h-slider" style="accent-color:rgb(${hue[0]},${hue[1]},${hue[2]})">
+      <div class="swatch h-swatch" style="background:rgb(${r.height},${r.height},${r.height})"></div>
+      <input type="number" min="0" max="255" value="${r.height}" class="h-num">
+    `;
+
+    // Events
+    row.onmouseenter = () => {
+      s.hoveredId = r.id;
+      row.classList.add('hovered');
+      renderView(r.id);
+    };
+    row.onmouseleave = () => {
+      s.hoveredId = null;
+      row.classList.remove('hovered');
+      renderView();
+    };
+    row.onclick = (e) => {
+      if (!s.mergeMode || e.target.tagName === 'INPUT') return;
+      const idx2 = s.mergeSelection.indexOf(r.id);
+      if (idx2 >= 0) {
+        // Deselect
+        s.mergeSelection.splice(idx2, 1);
+        row.classList.remove('merge-selected');
+      } else {
+        // Select
+        s.mergeSelection.push(r.id);
+        row.classList.add('merge-selected');
+      }
+      $('mergeCount').textContent = s.mergeSelection.length;
+      $('btnDoMerge').disabled = s.mergeSelection.length < 2;
+    };
+
+    const slider = row.querySelector('.h-slider');
+    const numInput = row.querySelector('.h-num');
+    const hSwatch = row.querySelector('.h-swatch');
+
+    slider.oninput = () => {
+      const v = parseInt(slider.value);
+      r.height = v;
+      numInput.value = v;
+      hSwatch.style.background = `rgb(${v},${v},${v})`;
+      if (s.viewMode === 'heightmap') debouncedRender();
+    };
+    numInput.onchange = () => {
+      const v = Math.max(0, Math.min(255, parseInt(numInput.value) || 0));
+      r.height = v;
+      slider.value = v;
+      hSwatch.style.background = `rgb(${v},${v},${v})`;
+      if (s.viewMode === 'heightmap') renderView();
+    };
+
+    frag.appendChild(row);
+  });
+
+  regionList.innerHTML = '';
+  regionList.appendChild(frag);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MERGE
+// ═══════════════════════════════════════════════════════════════
+
+function doMergeMultiple(ids) {
+  const s = A();
+  if (!s || ids.length < 2) return;
+
+  // Keep the region with the smallest id
+  ids.sort((a, b) => a - b);
+  const keepId = ids[0];
+  const removeIds = new Set(ids.slice(1));
+
+  const keep = s.regions.find(r => r.id === keepId);
+  if (!keep) return;
+
+  // Accumulate stats from all regions being merged in
+  let totalPx = keep.pixelCount;
+  let sumR = keep.color[0] * keep.pixelCount;
+  let sumG = keep.color[1] * keep.pixelCount;
+  let sumB = keep.color[2] * keep.pixelCount;
+
+  for (const rid of removeIds) {
+    const rem = s.regions.find(r => r.id === rid);
+    if (!rem) continue;
+    totalPx += rem.pixelCount;
+    sumR += rem.color[0] * rem.pixelCount;
+    sumG += rem.color[1] * rem.pixelCount;
+    sumB += rem.color[2] * rem.pixelCount;
+  }
+
+  keep.color = [(sumR / totalPx) | 0, (sumG / totalPx) | 0, (sumB / totalPx) | 0];
+  keep.pixelCount = totalPx;
+
+  // Update label map
+  const n = s.imgWidth * s.imgHeight;
+  for (let i = 0; i < n; i++) {
+    if (removeIds.has(s.labelMap[i])) s.labelMap[i] = keepId;
+  }
+
+  // Remove merged regions
+  s.regions = s.regions.filter(r => !removeIds.has(r.id));
+
+  s.mergeMode = false;
+  s.mergeSelection = [];
+  $('mergeBar').style.display = 'none';
+  toast(removeIds.size + ' regiones fusionadas \u2192 ' + s.regions.length + ' regiones');
+  buildRegionList();
+  renderView();
+  updateThumbBadge(activeIdx);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TABS & CONTROLS
+// ═══════════════════════════════════════════════════════════════
+
+$('tabBar').onclick = e => {
+  const tab = e.target.closest('.tab');
+  if (!tab) return;
+  const mode = tab.dataset.mode;
+  if (!mode) return;
+  const s = A();
+  if (s) s.viewMode = mode;
+  setActiveTab(mode);
+  renderView();
+};
+
+function setActiveTab(mode) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.mode === mode));
+}
+
+function showRegionTabs() {
+  $('tabRegions').style.display = '';
+  $('tabHeightmap').style.display = '';
+}
+function hideRegionTabs() {
+  $('tabRegions').style.display = 'none';
+  $('tabHeightmap').style.display = 'none';
+}
+
+// Processor selection
+$('procSelect').onchange = () => {
+  const s = A();
+  if (s) {
+    s.processor = $('procSelect').value;
+    buildParamControls(s);
+  }
+};
+
+function buildParamControls(s) {
+  if (!s) s = A();
+  const procKey = s ? s.processor : 'connected';
+  const proc = PROCESSORS[procKey];
+  $('procDesc').textContent = proc.desc;
+
+  if (s && Object.keys(s.paramValues).length === 0) {
+    proc.params.forEach(p => { s.paramValues[p.key] = p.default; });
+  }
+
+  const container = $('paramsContainer');
+  container.innerHTML = '';
+
+  proc.params.forEach(p => {
+    const currentVal = s ? (s.paramValues[p.key] != null ? s.paramValues[p.key] : p.default) : p.default;
+    const div = document.createElement('div');
+    div.className = 'ctrl';
+
+    if (p.type === 'range') {
+      div.innerHTML = `
+        <label>${p.label}</label>
+        <input type="range" min="${p.min}" max="${p.max}" step="${p.step}" value="${currentVal}" data-key="${p.key}">
+        <span class="val">${currentVal}</span>
+      `;
+      const inp = div.querySelector('input');
+      const val = div.querySelector('.val');
+      inp.oninput = () => {
+        const v = parseFloat(inp.value);
+        if (s) s.paramValues[p.key] = v;
+        val.textContent = inp.value;
+      };
+    } else if (p.type === 'select') {
+      div.innerHTML = `
+        <label>${p.label}</label>
+        <select data-key="${p.key}">
+          ${p.options.map(o => `<option value="${o.v}" ${o.v == currentVal ? 'selected' : ''}>${o.l}</option>`).join('')}
+        </select>
+      `;
+      const sel = div.querySelector('select');
+      sel.onchange = () => {
+        if (s) s.paramValues[p.key] = parseInt(sel.value);
+      };
+    }
+
+    container.appendChild(div);
+  });
+}
+
+// Presets
+document.querySelector('.presets').onclick = e => {
+  const btn = e.target.closest('[data-preset]');
+  if (!btn) return;
+  applyPreset(btn.dataset.preset);
+};
+
+function applyPreset(mode) {
+  const s = A();
+  if (!s) return;
+
+  const sorted = [...s.regions].sort((a, b) => {
+    const la = a.color[0]*0.299 + a.color[1]*0.587 + a.color[2]*0.114;
+    const lb = b.color[0]*0.299 + b.color[1]*0.587 + b.color[2]*0.114;
+    return la - lb;
+  });
+  const idRank = {};
+  sorted.forEach((r, i) => { idRank[r.id] = i; });
+  const n = s.regions.length;
+
+  if (mode === 'by-area') {
+    const bySz = [...s.regions].sort((a, b) => b.pixelCount - a.pixelCount);
+    bySz.forEach((r, i) => { r.height = Math.round((i / Math.max(1, n-1)) * 255); });
+  } else {
+    s.regions.forEach(r => {
+      const rank = idRank[r.id];
+      const t = n > 1 ? rank / (n - 1) : 0.5;
+      if (mode === 'light-high') r.height = Math.round(t * 255);
+      else if (mode === 'dark-high') r.height = Math.round((1 - t) * 255);
+      else if (mode === 'flat') r.height = 128;
+    });
+  }
+  buildRegionList();
+  if (s.viewMode === 'heightmap') renderView();
+}
+
+// Merge mode toggle
+$('btnMerge').onclick = () => {
+  const s = A();
+  if (!s) return;
+  s.mergeMode = !s.mergeMode;
+  s.mergeSelection = [];
+  $('mergeBar').style.display = s.mergeMode ? 'flex' : 'none';
+  $('mergeCount').textContent = '0';
+  $('btnDoMerge').disabled = true;
+  document.querySelectorAll('.merge-selected').forEach(el => el.classList.remove('merge-selected'));
+};
+// Execute merge
+$('btnDoMerge').onclick = () => {
+  const s = A();
+  if (!s || s.mergeSelection.length < 2) return;
+  doMergeMultiple([...s.mergeSelection]);
+};
+// Cancel merge
+$('btnCancelMerge').onclick = () => {
+  const s = A();
+  if (!s) return;
+  s.mergeMode = false;
+  s.mergeSelection = [];
+  $('mergeBar').style.display = 'none';
+  document.querySelectorAll('.merge-selected').forEach(el => el.classList.remove('merge-selected'));
+};
+
+// Remove current image
+$('btnRemoveImage').onclick = () => {
+  if (activeIdx >= 0) removeImage(activeIdx);
+};
+
+// Show numbers toggle
+$('chkShowNumbers').onchange = () => renderView();
+
+// Download heightmap
+$('btnDownload').onclick = () => {
+  const s = A();
+  if (!s || !s.labelMap || s.regions.length === 0) return;
+
+  const w = s.imgWidth, h = s.imgHeight, n = w * h;
+  const offscreen = document.createElement('canvas');
+  offscreen.width = w; offscreen.height = h;
+  const octx = offscreen.getContext('2d');
+  const imgData = octx.createImageData(w, h);
+  const data = imgData.data;
+
+  const maxId = s.regions.reduce((m, r) => Math.max(m, r.id), 0);
+  const lutH = new Uint8Array(maxId + 1).fill(128);
+  s.regions.forEach(r => { lutH[r.id] = r.height; });
+
+  for (let i = 0; i < n; i++) {
+    const lab = s.labelMap[i];
+    if (lab < 0) continue;
+    const p = i << 2;
+    const v = lutH[lab];
+    data[p] = v; data[p+1] = v; data[p+2] = v; data[p+3] = 255;
+  }
+  octx.putImageData(imgData, 0, 0);
+
+  offscreen.toBlob(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = s.filename.replace(/\.[^.]+$/, '') + '_heightmap.png';
+    a.click();
+    URL.revokeObjectURL(url);
+  }, 'image/png');
+};
+
+// Preprocessing slider feedback
+['_pre_blur', '_label_smooth'].forEach(key => {
+  const inp = $('param_' + key);
+  if (inp) {
+    inp.oninput = () => {
+      $('val_' + key).textContent = inp.value;
+      const s = A();
+      if (s) {
+        if (key === '_pre_blur') s.preBlur = parseInt(inp.value) || 0;
+        else s.labelSmooth = parseInt(inp.value) || 0;
+      }
+    };
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════
+
+function regionColor(i) {
+  const hue = (i * 137.508) % 360;
+  const s = 0.8 + (i % 3) * 0.1, l = 0.5 + (i % 2) * 0.15;
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs((hue / 60) % 2 - 1));
+  const m = l - c / 2;
+  let r, g, b;
+  if (hue < 60) { r = c; g = x; b = 0; }
+  else if (hue < 120) { r = x; g = c; b = 0; }
+  else if (hue < 180) { r = 0; g = c; b = x; }
+  else if (hue < 240) { r = 0; g = x; b = c; }
+  else if (hue < 300) { r = x; g = 0; b = c; }
+  else { r = c; g = 0; b = x; }
+  return [((r + m) * 255) | 0, ((g + m) * 255) | 0, ((b + m) * 255) | 0];
+}
+
+let _renderTimer = null;
+function debouncedRender() {
+  clearTimeout(_renderTimer);
+  _renderTimer = setTimeout(() => renderView(), 50);
+}
+
+function showLoading(msg) {
+  loadingMsg.textContent = msg;
+  loadingOverlay.classList.add('visible');
+  $('btnDetect').disabled = true;
+}
+function hideLoading() {
+  loadingOverlay.classList.remove('visible');
+  $('btnDetect').disabled = false;
+}
+
+let _toastTimer = null;
+function toast(msg) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.classList.add('visible');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove('visible'), 3000);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════
+buildParamControls(null);
+</script>
+</body>
+</html>
