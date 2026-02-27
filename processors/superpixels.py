@@ -21,33 +21,33 @@ class SuperpixelProcessor(BaseProcessor):
                 "key": "n_segments",
                 "label": "Segmentos iniciales",
                 "type": "slider",
-                "min": 20, "max": 500, "step": 10,
+                "min": 5, "max": 1000, "step": 5,
                 "default": 100,
-                "hint": "Más = más fino, menos = más grueso"
+                "hint": "Más = más fino (captura detalles pequeños), menos = más grueso"
             },
             {
                 "key": "compactness",
                 "label": "Compactación",
                 "type": "slider",
-                "min": 1, "max": 50, "step": 1,
+                "min": 1, "max": 100, "step": 1,
                 "default": 10,
-                "hint": "Mayor = regiones más cuadradas, menor = sigue bordes de color"
+                "hint": "Mayor = regiones más cuadradas/regulares, menor = sigue bordes de color con más detalle"
             },
             {
                 "key": "merge_tolerance",
                 "label": "Tolerancia de fusión",
                 "type": "slider",
-                "min": 5, "max": 60, "step": 1,
+                "min": 1, "max": 120, "step": 1,
                 "default": 25,
-                "hint": "Superpíxeles con color similar se fusionan"
+                "hint": "Superpíxeles vecinos con colores similares se fusionan. Mayor = menos regiones finales"
             },
             {
                 "key": "min_region_pct",
                 "label": "Región mínima (%)",
                 "type": "slider",
-                "min": 0.1, "max": 5.0, "step": 0.1,
-                "default": 0.5,
-                "hint": "Descarta regiones finales menores a este %"
+                "min": 0.01, "max": 10.0, "step": 0.01,
+                "default": 0.3,
+                "hint": "Descarta regiones finales menores a este % de la imagen"
             },
         ]
 

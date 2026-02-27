@@ -19,9 +19,27 @@
   }
   .container { max-width: 1400px; margin: 0 auto; }
   h1 { font-size: 20px; font-weight: 700; color: #fff; }
-  .subtitle { font-size: 12px; color: var(--text3); margin: 4px 0 16px; }
+  .subtitle { font-size: 12px; color: var(--text3); margin: 4px 0 10px; }
 
-  /* Upload */
+  /* ─── Toolbar ─── */
+  .toolbar {
+    display: flex; align-items: center; gap: 6px; margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .toolbar-sep { width: 1px; height: 24px; background: var(--border2); margin: 0 4px; }
+  .btn-toolbar {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--surface2); border: 1px solid var(--border2);
+    color: var(--text2); border-radius: 6px; padding: 6px 12px;
+    font-size: 12px; font-weight: 600; cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .btn-toolbar:hover { border-color: var(--accent); color: var(--text); }
+  .btn-toolbar:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn-toolbar.undo-btn:not(:disabled) { border-color: #888; }
+  .btn-toolbar svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+  /* ─── Upload ─── */
   .upload-zone {
     border: 2px dashed var(--border2); border-radius: 12px;
     padding: 50px 20px; text-align: center; cursor: pointer;
@@ -32,7 +50,7 @@
   .upload-zone .label { font-size: 14px; color: var(--text2); }
   .upload-zone .hint { font-size: 11px; color: var(--text3); margin-top: 4px; }
 
-  /* Image bar */
+  /* ─── Image bar ─── */
   .image-bar {
     display: flex; gap: 6px; align-items: center; margin-bottom: 10px;
     padding: 6px; background: var(--surface); border-radius: 8px;
@@ -58,8 +76,8 @@
     padding: 0 4px; border-radius: 8px; line-height: 14px;
   }
   .image-thumb .thumb-close {
-    position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
-    font-size: 10px; color: #fff; background: rgba(239,68,68,0.8);
+    position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
+    font-size: 11px; color: #fff; background: rgba(239,68,68,0.85);
     border: none; border-radius: 50%; cursor: pointer; display: none;
     align-items: center; justify-content: center; line-height: 1;
   }
@@ -75,20 +93,20 @@
   .add-image-btn:hover { border-color: var(--accent); color: var(--accent); }
   .add-image-btn .add-label { font-size: 8px; }
 
-  /* Layout */
+  /* ─── Layout ─── */
   .layout { display: none; gap: 16px; flex-wrap: wrap; }
   .layout.visible { display: flex; }
   .col-left { flex: 1 1 600px; min-width: 360px; }
   .col-right { flex: 1 1 400px; min-width: 320px; max-height: calc(100vh - 80px); overflow-y: auto; }
 
-  /* Panel */
+  /* ─── Panel ─── */
   .panel {
     background: var(--surface); border: 1px solid var(--border);
     border-radius: 8px; padding: 14px; margin-bottom: 12px;
   }
   .panel-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
 
-  /* Tabs */
+  /* ─── Tabs ─── */
   .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border2); }
   .tab {
     padding: 6px 14px; font-size: 12px; background: transparent;
@@ -101,32 +119,99 @@
   }
   .tab:hover:not(.active) { color: var(--text2); }
 
-  /* Canvas */
+  /* ─── Canvas zoom viewport ─── */
   .canvas-wrap {
     background: var(--surface); border-radius: 0 0 8px 8px;
-    padding: 8px; border: 1px solid var(--border); border-top: none;
+    border: 1px solid var(--border); border-top: none;
   }
-  .canvas-container { position: relative; }
-  .canvas-container canvas {
-    width: 100%; height: auto; border-radius: 4px; display: block;
+  .zoom-controls {
+    display: flex; align-items: center; gap: 4px; padding: 6px 8px 0;
+  }
+  .zoom-btn {
+    width: 28px; height: 28px; background: var(--surface2);
+    border: 1px solid var(--border2); color: var(--text2);
+    border-radius: 5px; cursor: pointer; font-size: 16px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    transition: border-color 0.1s, color 0.1s; flex-shrink: 0;
+    user-select: none;
+  }
+  .zoom-btn:hover { border-color: var(--accent); color: var(--text); }
+  .zoom-label {
+    font-size: 11px; color: var(--text3); width: 44px; text-align: center;
+  }
+  .zoom-reset-btn {
+    padding: 0 8px; height: 28px; background: var(--surface2);
+    border: 1px solid var(--border2); color: var(--text2);
+    border-radius: 5px; cursor: pointer; font-size: 11px;
+    display: flex; align-items: center; transition: border-color 0.1s;
+  }
+  .zoom-reset-btn:hover { border-color: var(--accent); color: var(--text); }
+  .canvas-viewport {
+    position: relative;
+    overflow: hidden;
+    cursor: grab;
+    min-height: 120px;
     background: repeating-conic-gradient(#222 0% 25%, #1a1a1a 0% 50%) 50% / 16px 16px;
+    border-radius: 0 0 6px 6px;
+    margin: 6px 8px 8px;
+  }
+  .canvas-viewport.dragging { cursor: grabbing; }
+  .canvas-positioner {
+    position: absolute;
+    top: 0; left: 0;
+    transform-origin: top left;
+    /* js sets transform */
+  }
+  .canvas-positioner canvas {
+    display: block;
+    /* width/height set by js to image pixel dimensions */
   }
   .canvas-info {
     display: flex; justify-content: space-between;
-    font-size: 11px; color: var(--text3); margin-top: 4px;
+    font-size: 11px; color: var(--text3); padding: 0 8px 6px;
   }
 
-  /* Controls */
-  .ctrl { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  /* ─── Loading overlay ─── */
+  .loading-overlay {
+    position: absolute; inset: 0; background: rgba(13,13,26,0.8);
+    display: none; align-items: center; justify-content: center;
+    font-size: 14px; color: var(--text2); z-index: 10;
+  }
+  .loading-overlay.visible { display: flex; }
+
+  /* ─── Controls ─── */
+  .ctrl { display: flex; align-items: center; gap: 5px; margin-bottom: 7px; flex-wrap: wrap; }
   .ctrl label { font-size: 12px; color: var(--text2); width: 130px; flex-shrink: 0; }
-  .ctrl input[type=range] { flex: 1; accent-color: var(--accent); }
-  .ctrl .val { font-size: 11px; color: var(--text3); width: 40px; text-align: right; }
+  .ctrl input[type=range] { flex: 1; min-width: 60px; accent-color: var(--accent); }
+  .ctrl .val { display: none; } /* replaced by ctrl-num */
+  .ctrl-sb {
+    width: 22px; height: 22px; border-radius: 4px; border: 1px solid var(--border2);
+    background: var(--surface2); color: var(--text2); font-size: 15px; font-weight: 700;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; transition: border-color 0.1s, color 0.1s; line-height: 1;
+    user-select: none; padding-bottom: 1px;
+  }
+  .ctrl-sb:hover { border-color: var(--accent); color: #fff; }
+  .ctrl-sb:active { background: #2a2a4a; }
+  .ctrl-num {
+    width: 58px; background: var(--surface2); color: var(--text);
+    border: 1px solid var(--border2); border-radius: 4px;
+    padding: 3px 5px; font-size: 11px; text-align: center;
+    -moz-appearance: textfield; flex-shrink: 0;
+  }
+  .ctrl-num::-webkit-outer-spin-button,
+  .ctrl-num::-webkit-inner-spin-button { -webkit-appearance: none; }
+  .ctrl-num:focus { border-color: var(--accent); outline: none; }
+  .ctrl-px-hint {
+    width: 100%; padding-left: 135px; font-size: 10px;
+    color: var(--accent); margin-top: -4px;
+  }
   .ctrl select {
     flex: 1; background: var(--surface2); color: var(--text);
     border: 1px solid var(--border2); border-radius: 4px; padding: 4px 8px; font-size: 12px;
   }
 
-  /* Buttons */
+  /* ─── Buttons ─── */
   .btn {
     width: 100%; border: none; border-radius: 6px; padding: 10px;
     font-size: 13px; font-weight: 600; cursor: pointer; color: #fff;
@@ -147,34 +232,49 @@
     font-size: 11px; cursor: pointer; width: auto; padding: 4px 8px;
   }
 
-  /* Region list */
+  /* ─── Region list ─── */
   .region-scroll { max-height: 500px; overflow-y: auto; }
   .region-row {
-    display: flex; align-items: center; gap: 8px; padding: 5px 8px;
+    display: flex; align-items: center; gap: 8px; padding: 8px 8px;
     border-radius: 6px; transition: background 0.1s;
     border-left: 3px solid transparent; cursor: default;
+    min-height: 46px;
   }
   .region-row:hover, .region-row.hovered { background: var(--surface2); }
   .region-row.merge-selected { outline: 2px solid var(--accent); outline-offset: -2px; }
   .region-num {
-    font-size: 11px; font-weight: 700; color: #fff; background: var(--surface2);
+    font-size: 12px; font-weight: 700; color: #fff; background: var(--surface2);
     border: 1px solid var(--border2); border-radius: 4px;
-    width: 28px; height: 24px; display: flex; align-items: center;
+    width: 34px; height: 28px; display: flex; align-items: center;
     justify-content: center; flex-shrink: 0;
   }
-  .swatch { width: 26px; height: 26px; border-radius: 4px; flex-shrink: 0; border: 1px solid #555; }
+  .swatch { width: 28px; height: 28px; border-radius: 4px; flex-shrink: 0; border: 1px solid #555; }
   .area-pct { font-size: 10px; color: var(--text3); width: 38px; text-align: right; flex-shrink: 0; }
-  .region-row input[type=range] { flex: 1; min-width: 60px; }
+  .region-row input[type=range] { flex: 1; min-width: 60px; accent-color: var(--accent); }
   .region-row input[type=number] {
-    width: 44px; background: var(--surface2); color: var(--text);
+    width: 48px; background: var(--surface2); color: var(--text);
     border: 1px solid var(--border2); border-radius: 4px;
-    padding: 3px 4px; font-size: 11px; text-align: center;
+    padding: 4px 4px; font-size: 12px; text-align: center;
+    -moz-appearance: textfield;
   }
+  .region-row input[type=number]::-webkit-outer-spin-button,
+  .region-row input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 
-  /* Presets */
+  /* +/- buttons */
+  .step-btn {
+    width: 26px; height: 26px; border-radius: 5px; border: 1px solid var(--border2);
+    background: var(--surface2); color: var(--text2); font-size: 16px; font-weight: 700;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; transition: border-color 0.1s, color 0.1s; line-height: 1;
+    user-select: none; padding-bottom: 1px;
+  }
+  .step-btn:hover { border-color: var(--accent); color: #fff; }
+  .step-btn:active { background: #2a2a4a; }
+
+  /* ─── Presets ─── */
   .presets { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 8px; }
 
-  /* Merge bar */
+  /* ─── Merge bar ─── */
   .merge-bar {
     display: flex; align-items: center; gap: 8px; padding: 8px;
     background: var(--surface2); border-radius: 6px; margin-bottom: 8px;
@@ -182,18 +282,10 @@
   }
   .merge-bar .info { flex: 1; color: #ccc; }
 
-  /* Processor selector */
+  /* ─── Processor selector ─── */
   .proc-desc { font-size: 11px; color: var(--text3); margin: 4px 0 10px; }
 
-  /* Loading */
-  .loading-overlay {
-    position: absolute; inset: 0; background: rgba(13,13,26,0.8);
-    display: none; align-items: center; justify-content: center;
-    border-radius: 8px; font-size: 14px; color: var(--text2);
-  }
-  .loading-overlay.visible { display: flex; }
-
-  /* Toast */
+  /* ─── Toast ─── */
   .toast {
     position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
     background: var(--surface2); border: 1px solid var(--border2);
@@ -203,13 +295,13 @@
   }
   .toast.visible { opacity: 1; }
 
-  /* Performance badge */
+  /* ─── Performance badge ─── */
   .perf-badge {
     font-size: 10px; color: var(--success); background: rgba(34,197,94,0.1);
     padding: 2px 8px; border-radius: 10px; margin-left: 8px;
   }
 
-  /* Show numbers toggle */
+  /* ─── Toggle row ─── */
   .toggle-row {
     display: flex; align-items: center; gap: 6px; margin-bottom: 8px;
     font-size: 11px; color: var(--text2);
@@ -222,6 +314,25 @@
 <div class="container">
   <h1>Heightmap Studio</h1>
   <p class="subtitle">Deteccion de regiones &rarr; Asignacion de alturas &rarr; Heightmap listo para displacement</p>
+
+  <!-- Toolbar -->
+  <div class="toolbar" id="toolbar">
+    <button class="btn-toolbar" id="btnSave" title="Guardar proyecto como JSON">
+      <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 2a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H2zm0 1h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zm2 3a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1H4zm0 1h8v4H4V7zm1.5 1a.5.5 0 0 0 0 1h5a.5.5 0 0 0 0-1h-5z"/></svg>
+      Guardar Proyecto
+    </button>
+    <button class="btn-toolbar" id="btnLoad" title="Cargar proyecto desde JSON">
+      <svg viewBox="0 0 16 16" fill="currentColor"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/><path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3z"/></svg>
+      Cargar Proyecto
+    </button>
+    <input type="file" id="loadProjectInput" accept=".json" hidden>
+    <div class="toolbar-sep"></div>
+    <button class="btn-toolbar undo-btn" id="btnUndo" title="Deshacer (Ctrl+Z)" disabled>
+      <svg viewBox="0 0 16 16" fill="currentColor"><path fill-rule="evenodd" d="M8 3a5 5 0 1 1-4.546 2.914.5.5 0 0 0-.908-.417A6 6 0 1 0 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 0-.41-.192L5.23 2.308a.25.25 0 0 0 0 .384l2.36 1.966A.25.25 0 0 0 8 4.466z"/></svg>
+      Deshacer
+      <span style="font-size:10px;color:var(--text3);font-weight:400;">(Ctrl+Z)</span>
+    </button>
+  </div>
 
   <!-- Upload -->
   <div class="upload-zone" id="uploadZone">
@@ -249,18 +360,32 @@
         <div style="flex:1"></div>
         <button class="btn-link" id="btnRemoveImage">&#10005; Quitar imagen</button>
       </div>
+
       <div class="canvas-wrap">
-        <div class="canvas-container">
-          <canvas id="mainCanvas"></canvas>
-          <div class="loading-overlay" id="loadingOverlay">
-            <span id="loadingMsg">Procesando...</span>
+        <!-- Zoom controls -->
+        <div class="zoom-controls">
+          <button class="zoom-btn" id="btnZoomOut" title="Zoom out (-)">−</button>
+          <span class="zoom-label" id="zoomLabel">100%</span>
+          <button class="zoom-btn" id="btnZoomIn" title="Zoom in (+)">+</button>
+          <button class="zoom-reset-btn" id="btnZoomFit" title="Ajustar a ventana">Ajustar</button>
+        </div>
+
+        <!-- Zoomable viewport -->
+        <div class="canvas-viewport" id="canvasViewport">
+          <div class="canvas-positioner" id="canvasPositioner">
+            <canvas id="mainCanvas"></canvas>
+            <div class="loading-overlay" id="loadingOverlay">
+              <span id="loadingMsg">Procesando...</span>
+            </div>
           </div>
         </div>
+
         <div class="canvas-info">
           <span id="infoFile">&mdash;</span>
           <span id="infoRegions"></span>
         </div>
       </div>
+
       <button class="btn btn-accent" id="btnDownload" style="margin-top:8px; display:none">
         Descargar Heightmap PNG
       </button>
@@ -283,13 +408,17 @@
         </div>
         <div class="ctrl">
           <label>Suavizado previo</label>
+          <button class="ctrl-sb" id="sb__pre_blur_minus">−</button>
           <input type="range" min="0" max="9" step="1" value="3" id="param__pre_blur">
-          <span class="val" id="val__pre_blur">3</span>
+          <button class="ctrl-sb" id="sb__pre_blur_plus">+</button>
+          <input type="number" class="ctrl-num" min="0" max="9" step="1" value="3" id="num__pre_blur">
         </div>
         <div class="ctrl">
           <label>Suavizado de regiones</label>
+          <button class="ctrl-sb" id="sb__label_smooth_minus">−</button>
           <input type="range" min="0" max="15" step="1" value="5" id="param__label_smooth">
-          <span class="val" id="val__label_smooth">5</span>
+          <button class="ctrl-sb" id="sb__label_smooth_plus">+</button>
+          <input type="number" class="ctrl-num" min="0" max="15" step="1" value="5" id="num__label_smooth">
         </div>
 
         <button class="btn btn-accent" id="btnDetect">Detectar Regiones</button>
@@ -336,7 +465,6 @@
 // MULTI-IMAGE STATE
 // ═══════════════════════════════════════════════════════════════
 
-// Each image gets its own state object
 function createImageState(filename, imgRGBA, width, height, thumbUrl) {
   return {
     filename,
@@ -354,23 +482,22 @@ function createImageState(filename, imgRGBA, width, height, thumbUrl) {
     paramValues: {},
     preBlur: 3,
     labelSmooth: 5,
+    undoStack: [],   // [{regions, labelMap}] snapshots
   };
 }
 
-const images = [];     // array of image states
-let activeIdx = -1;    // index of currently active image
+const images = [];
+let activeIdx = -1;
 
-// Shortcut to get active image state
 function A() { return activeIdx >= 0 ? images[activeIdx] : null; }
 
-// Processor parameter definitions
 const PROCESSORS = {
   connected: {
     name: 'Componentes Conectados',
     desc: 'Detecta regiones por color + proximidad espacial. Mismo color en zonas separadas = regiones distintas.',
     params: [
       { key: 'tolerance', label: 'Tolerancia de color', type: 'range', min: 5, max: 80, step: 1, default: 30 },
-      { key: 'min_region_pct', label: 'Region minima (%)', type: 'range', min: 0.05, max: 5, step: 0.05, default: 0.5 },
+      { key: 'min_region_pct', label: 'Region minima (%)', type: 'range', min: 0.001, max: 5, step: 0.001, default: 0.3, showPx: true },
       { key: 'connectivity', label: 'Conectividad', type: 'select', options: [{v:4,l:'4-vecinos'},{v:8,l:'8-vecinos'}], default: 4 },
     ],
   },
@@ -379,7 +506,7 @@ const PROCESSORS = {
     desc: 'Agrupa pixeles solo por color (ignora posicion). Todos los pixeles del mismo color = misma region.',
     params: [
       { key: 'tolerance', label: 'Tolerancia de color', type: 'range', min: 5, max: 80, step: 1, default: 35 },
-      { key: 'min_region_pct', label: 'Region minima (%)', type: 'range', min: 0.1, max: 5, step: 0.1, default: 0.5 },
+      { key: 'min_region_pct', label: 'Region minima (%)', type: 'range', min: 0.001, max: 5, step: 0.001, default: 0.3, showPx: true },
       { key: 'max_samples', label: 'Muestras', type: 'range', min: 5000, max: 100000, step: 5000, default: 30000 },
     ],
   },
@@ -399,6 +526,225 @@ const loadingMsg = $('loadingMsg');
 const regionList = $('regionList');
 const regionsPanel = $('regionsPanel');
 const imageBar = $('imageBar');
+const canvasViewport = $('canvasViewport');
+const canvasPositioner = $('canvasPositioner');
+
+// ═══════════════════════════════════════════════════════════════
+// UNDO SYSTEM
+// ═══════════════════════════════════════════════════════════════
+
+function pushUndo() {
+  const s = A();
+  if (!s) return;
+  const snapshot = {
+    regions: JSON.parse(JSON.stringify(s.regions)),
+    labelMap: s.labelMap ? new Int32Array(s.labelMap) : null,
+  };
+  s.undoStack.push(snapshot);
+  if (s.undoStack.length > 30) s.undoStack.shift();
+  updateUndoBtn();
+}
+
+function undo() {
+  const s = A();
+  if (!s || s.undoStack.length === 0) return;
+  const snap = s.undoStack.pop();
+  s.regions = snap.regions;
+  s.labelMap = snap.labelMap;
+  updateUndoBtn();
+  if (s.regions.length > 0) {
+    showRegionTabs();
+    if (s.viewMode === 'original') setActiveTab('regions'), s.viewMode = 'regions';
+    buildRegionList();
+    $('infoRegions').textContent = s.regions.length + ' regiones';
+    $('btnDownload').style.display = '';
+  } else {
+    hideRegionTabs();
+    s.viewMode = 'original';
+    setActiveTab('original');
+    regionsPanel.style.display = 'none';
+    $('infoRegions').textContent = '';
+    $('btnDownload').style.display = 'none';
+  }
+  renderView();
+  updateThumbBadge(activeIdx);
+  toast('Deshacer \u2190 ' + (s.undoStack.length) + ' cambios restantes');
+}
+
+function updateUndoBtn() {
+  const s = A();
+  const btn = $('btnUndo');
+  btn.disabled = !s || s.undoStack.length === 0;
+}
+
+$('btnUndo').onclick = undo;
+
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+    e.preventDefault();
+    undo();
+  }
+  // Zoom shortcuts
+  if ((e.ctrlKey || e.metaKey) && (e.key === '=' || e.key === '+')) {
+    e.preventDefault(); adjustZoom(0.25);
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key === '-') {
+    e.preventDefault(); adjustZoom(-0.25);
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key === '0') {
+    e.preventDefault(); zoomFit();
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// ZOOM / PAN SYSTEM
+// ═══════════════════════════════════════════════════════════════
+
+let zoomLevel = 1.0;
+let panX = 0, panY = 0;
+let isDragging = false, dragStartX = 0, dragStartY = 0, panStartX = 0, panStartY = 0;
+
+let _zoomRenderTimer = null;
+function applyTransform() {
+  canvasPositioner.style.transform = `translate(${panX}px, ${panY}px) scale(${zoomLevel})`;
+  $('zoomLabel').textContent = Math.round(zoomLevel * 100) + '%';
+  // Re-render numbers at zoom-adjusted size (debounced for perf during fast scroll)
+  clearTimeout(_zoomRenderTimer);
+  _zoomRenderTimer = setTimeout(() => renderView(), 80);
+}
+
+function clampPan() {
+  const s = A();
+  if (!s) { panX = 0; panY = 0; return; }
+  const vw = canvasViewport.clientWidth;
+  const vh = canvasViewport.clientHeight;
+  const sw = s.imgWidth * zoomLevel;
+  const sh = s.imgHeight * zoomLevel;
+
+  const minX = Math.min(0, vw - sw);
+  const minY = Math.min(0, vh - sh);
+  panX = Math.max(minX, Math.min(0, panX));
+  panY = Math.max(minY, Math.min(0, panY));
+}
+
+function adjustZoom(delta) {
+  const newZoom = Math.max(0.1, Math.min(10, zoomLevel + delta));
+  const vw = canvasViewport.clientWidth;
+  const vh = canvasViewport.clientHeight;
+  // Zoom toward viewport center
+  const cx = vw / 2;
+  const cy = vh / 2;
+  const ratio = newZoom / zoomLevel;
+  panX = cx - ratio * (cx - panX);
+  panY = cy - ratio * (cy - panY);
+  zoomLevel = newZoom;
+  clampPan();
+  applyTransform();
+}
+
+function zoomFit() {
+  const s = A();
+  if (!s) return;
+  const vw = canvasViewport.clientWidth;
+  const vh = canvasViewport.clientHeight;
+  zoomLevel = Math.min(vw / s.imgWidth, vh / s.imgHeight, 1);
+  panX = (vw - s.imgWidth * zoomLevel) / 2;
+  panY = (vh - s.imgHeight * zoomLevel) / 2;
+  panX = Math.max(0, panX);
+  panY = Math.max(0, panY);
+  applyTransform();
+}
+
+function resetZoom() {
+  const s = A();
+  if (!s) return;
+  zoomLevel = 1.0;
+  panX = 0; panY = 0;
+  applyTransform();
+}
+
+// Set canvas viewport height based on image aspect
+function updateViewportHeight() {
+  const s = A();
+  if (!s) return;
+  const vw = canvasViewport.clientWidth || 600;
+  const aspect = s.imgHeight / s.imgWidth;
+  const h = Math.max(150, Math.min(vw * aspect, 600));
+  canvasViewport.style.height = h + 'px';
+}
+
+// Mouse wheel zoom
+canvasViewport.addEventListener('wheel', e => {
+  e.preventDefault();
+  const rect = canvasViewport.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const delta = e.deltaY < 0 ? 0.15 : -0.15;
+  const newZoom = Math.max(0.1, Math.min(10, zoomLevel + delta));
+  const ratio = newZoom / zoomLevel;
+  panX = mx - ratio * (mx - panX);
+  panY = my - ratio * (my - panY);
+  zoomLevel = newZoom;
+  clampPan();
+  applyTransform();
+}, { passive: false });
+
+// Drag to pan
+canvasViewport.addEventListener('mousedown', e => {
+  if (e.button !== 0) return;
+  isDragging = true;
+  dragStartX = e.clientX;
+  dragStartY = e.clientY;
+  panStartX = panX;
+  panStartY = panY;
+  canvasViewport.classList.add('dragging');
+});
+window.addEventListener('mousemove', e => {
+  if (!isDragging) return;
+  panX = panStartX + (e.clientX - dragStartX);
+  panY = panStartY + (e.clientY - dragStartY);
+  clampPan();
+  applyTransform();
+});
+window.addEventListener('mouseup', () => {
+  if (!isDragging) return;
+  isDragging = false;
+  canvasViewport.classList.remove('dragging');
+});
+
+// Touch zoom & pan
+let touchDist = 0, touchPanX = 0, touchPanY = 0;
+canvasViewport.addEventListener('touchstart', e => {
+  if (e.touches.length === 2) {
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    touchDist = Math.hypot(dx, dy);
+  } else if (e.touches.length === 1) {
+    dragStartX = e.touches[0].clientX;
+    dragStartY = e.touches[0].clientY;
+    panStartX = panX; panStartY = panY;
+  }
+}, { passive: true });
+canvasViewport.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (e.touches.length === 2) {
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    const dist = Math.hypot(dx, dy);
+    const delta = (dist - touchDist) / touchDist;
+    touchDist = dist;
+    adjustZoom(delta * zoomLevel * 0.5);
+  } else if (e.touches.length === 1) {
+    panX = panStartX + (e.touches[0].clientX - dragStartX);
+    panY = panStartY + (e.touches[0].clientY - dragStartY);
+    clampPan();
+    applyTransform();
+  }
+}, { passive: false });
+
+$('btnZoomIn').onclick = () => adjustZoom(0.25);
+$('btnZoomOut').onclick = () => adjustZoom(-0.25);
+$('btnZoomFit').onclick = zoomFit;
 
 // ═══════════════════════════════════════════════════════════════
 // WEB WORKER
@@ -411,6 +757,7 @@ worker.onmessage = function(e) {
   if (!s) return;
 
   if (msg.type === 'result') {
+    pushUndo(); // save state before applying result
     s.labelMap = new Int32Array(msg.labelMap);
     s.regions = msg.regions;
     hideLoading();
@@ -450,9 +797,8 @@ fileInput.onchange = e => {
 
 $('btnAddImage').onclick = () => fileInput.click();
 
-// Global drag & drop — works even when images are already loaded
 document.addEventListener('dragover', e => {
-  if (uploadZone.style.display !== 'none') return; // upload zone handles its own
+  if (uploadZone.style.display !== 'none') return;
   e.preventDefault();
   imageBar.style.borderColor = 'var(--accent)';
 });
@@ -461,7 +807,7 @@ document.addEventListener('dragleave', e => {
   imageBar.style.borderColor = '';
 });
 document.addEventListener('drop', e => {
-  if (uploadZone.style.display !== 'none') return; // upload zone handles its own
+  if (uploadZone.style.display !== 'none') return;
   e.preventDefault();
   imageBar.style.borderColor = '';
   const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
@@ -471,7 +817,6 @@ document.addEventListener('drop', e => {
 function loadImage(file) {
   const img = new Image();
   img.onload = () => {
-    // Create thumbnail
     const thumbCanvas = document.createElement('canvas');
     const thumbSize = 144;
     thumbCanvas.width = thumbSize;
@@ -482,7 +827,6 @@ function loadImage(file) {
     tctx.drawImage(img, (thumbSize - sw) / 2, (thumbSize - sh) / 2, sw, sh);
     const thumbUrl = thumbCanvas.toDataURL('image/jpeg', 0.7);
 
-    // Get pixel data
     const tmpCanvas = document.createElement('canvas');
     tmpCanvas.width = img.width;
     tmpCanvas.height = img.height;
@@ -490,7 +834,6 @@ function loadImage(file) {
     tmpCtx.drawImage(img, 0, 0);
     const imageData = tmpCtx.getImageData(0, 0, img.width, img.height);
 
-    // Initialize default param values for this image
     const state = createImageState(file.name, imageData.data, img.width, img.height, thumbUrl);
     const proc = PROCESSORS[state.processor];
     proc.params.forEach(p => { state.paramValues[p.key] = p.default; });
@@ -498,7 +841,6 @@ function loadImage(file) {
     images.push(state);
     const newIdx = images.length - 1;
 
-    // Show layout
     uploadZone.style.display = 'none';
     mainLayout.classList.add('visible');
 
@@ -511,11 +853,146 @@ function loadImage(file) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// PROJECT SAVE / LOAD
+// ═══════════════════════════════════════════════════════════════
+
+function typedArrayToBase64(arr) {
+  const bytes = new Uint8Array(arr.buffer || arr);
+  let binary = '';
+  const chunk = 8192;
+  for (let i = 0; i < bytes.byteLength; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunk, bytes.byteLength)));
+  }
+  return btoa(binary);
+}
+
+function base64ToInt32Array(b64) {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Int32Array(bytes.buffer);
+}
+
+function imgRGBAtoDataURL(rgba, width, height) {
+  const c = document.createElement('canvas');
+  c.width = width; c.height = height;
+  const cx = c.getContext('2d');
+  cx.putImageData(new ImageData(new Uint8ClampedArray(rgba), width, height), 0, 0);
+  return c.toDataURL('image/png');
+}
+
+$('btnSave').onclick = () => {
+  if (images.length === 0) { toast('No hay imagenes cargadas'); return; }
+  toast('Guardando proyecto...');
+
+  const project = {
+    version: 1,
+    activeIdx,
+    images: images.map(s => ({
+      filename: s.filename,
+      imgData: imgRGBAtoDataURL(s.imgRGBA, s.imgWidth, s.imgHeight),
+      imgWidth: s.imgWidth,
+      imgHeight: s.imgHeight,
+      thumbUrl: s.thumbUrl,
+      labelMap: s.labelMap ? typedArrayToBase64(s.labelMap) : null,
+      regions: JSON.parse(JSON.stringify(s.regions)),
+      viewMode: s.viewMode,
+      processor: s.processor,
+      paramValues: { ...s.paramValues },
+      preBlur: s.preBlur,
+      labelSmooth: s.labelSmooth,
+    })),
+  };
+
+  const json = JSON.stringify(project);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'heightmap_project.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('Proyecto guardado \u2713');
+};
+
+$('btnLoad').onclick = () => $('loadProjectInput').click();
+
+$('loadProjectInput').onchange = e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  $('loadProjectInput').value = '';
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const project = JSON.parse(ev.target.result);
+      loadProject(project);
+    } catch (err) {
+      toast('Error al cargar: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+};
+
+function loadProject(project) {
+  if (!project || !Array.isArray(project.images) || project.images.length === 0) {
+    toast('Proyecto invalido'); return;
+  }
+  toast('Cargando proyecto...');
+
+  // Clear current state
+  images.length = 0;
+  activeIdx = -1;
+
+  let loaded = 0;
+  const total = project.images.length;
+
+  project.images.forEach((imgData, idx) => {
+    const img = new Image();
+    img.onload = () => {
+      const tmpCanvas = document.createElement('canvas');
+      tmpCanvas.width = imgData.imgWidth;
+      tmpCanvas.height = imgData.imgHeight;
+      const tmpCtx = tmpCanvas.getContext('2d');
+      tmpCtx.drawImage(img, 0, 0);
+      const imageDataObj = tmpCtx.getImageData(0, 0, imgData.imgWidth, imgData.imgHeight);
+
+      const state = createImageState(
+        imgData.filename,
+        imageDataObj.data,
+        imgData.imgWidth,
+        imgData.imgHeight,
+        imgData.thumbUrl
+      );
+      state.labelMap = imgData.labelMap ? base64ToInt32Array(imgData.labelMap) : null;
+      state.regions = imgData.regions || [];
+      state.viewMode = imgData.viewMode || 'original';
+      state.processor = imgData.processor || 'connected';
+      state.paramValues = imgData.paramValues || {};
+      state.preBlur = imgData.preBlur ?? 3;
+      state.labelSmooth = imgData.labelSmooth ?? 5;
+
+      images[idx] = state;
+      loaded++;
+
+      if (loaded === total) {
+        // All images loaded
+        uploadZone.style.display = 'none';
+        mainLayout.classList.add('visible');
+        buildImageBar();
+        const targetIdx = project.activeIdx >= 0 && project.activeIdx < total ? project.activeIdx : 0;
+        switchToImage(targetIdx);
+        toast('Proyecto cargado \u2713 (' + total + ' imagen' + (total !== 1 ? 'es' : '') + ')');
+      }
+    };
+    img.src = imgData.imgData;
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
 // IMAGE BAR
 // ═══════════════════════════════════════════════════════════════
 
 function buildImageBar() {
-  // Remove all thumbs (keep the add button)
   const addBtn = $('btnAddImage');
   imageBar.innerHTML = '';
 
@@ -543,14 +1020,10 @@ function buildImageBar() {
     const closeBtn = document.createElement('button');
     closeBtn.className = 'thumb-close';
     closeBtn.textContent = '\u00d7';
-    closeBtn.onclick = (e) => {
-      e.stopPropagation();
-      removeImage(idx);
-    };
+    closeBtn.onclick = (e) => { e.stopPropagation(); removeImage(idx); };
     thumb.appendChild(closeBtn);
 
     thumb.onclick = () => switchToImage(idx);
-
     imageBar.appendChild(thumb);
   });
 
@@ -558,7 +1031,6 @@ function buildImageBar() {
 }
 
 function updateThumbBadge(idx) {
-  // Quick update without full rebuild
   const thumbs = imageBar.querySelectorAll('.image-thumb');
   if (thumbs[idx]) {
     let badge = thumbs[idx].querySelector('.thumb-badge');
@@ -578,29 +1050,25 @@ function updateThumbBadge(idx) {
 
 function switchToImage(idx) {
   if (idx < 0 || idx >= images.length) return;
-
-  // Save current state from UI controls
   saveCurrentUIState();
-
   activeIdx = idx;
   const s = images[idx];
 
-  // Update canvas
   mainCanvas.width = s.imgWidth;
   mainCanvas.height = s.imgHeight;
 
-  // Update info
+  // Reset zoom for new image
+  zoomLevel = 1.0; panX = 0; panY = 0;
+  updateViewportHeight();
+  zoomFit();
+
   $('infoFile').textContent = s.filename + ' \u2014 ' + s.imgWidth + '\u00d7' + s.imgHeight;
 
-  // Restore processor & params
   $('procSelect').value = s.processor;
   buildParamControls(s);
-  $('param__pre_blur').value = s.preBlur;
-  $('val__pre_blur').textContent = s.preBlur;
-  $('param__label_smooth').value = s.labelSmooth;
-  $('val__label_smooth').textContent = s.labelSmooth;
+  $('param__pre_blur').value  = s.preBlur;   $('num__pre_blur').value  = s.preBlur;
+  $('param__label_smooth').value = s.labelSmooth; $('num__label_smooth').value = s.labelSmooth;
 
-  // Restore view state
   if (s.regions.length > 0) {
     showRegionTabs();
     setActiveTab(s.viewMode);
@@ -616,14 +1084,13 @@ function switchToImage(idx) {
     $('btnDownload').style.display = 'none';
   }
 
-  // Merge state
   s.mergeMode = false;
   s.mergeSelection = [];
   $('mergeBar').style.display = 'none';
 
   renderView();
+  updateUndoBtn();
 
-  // Update active thumb
   imageBar.querySelectorAll('.image-thumb').forEach((t, i) => {
     t.classList.toggle('active', i === idx);
   });
@@ -635,27 +1102,22 @@ function saveCurrentUIState() {
   s.processor = $('procSelect').value;
   s.preBlur = parseInt($('param__pre_blur').value) || 0;
   s.labelSmooth = parseInt($('param__label_smooth').value) || 0;
-  // paramValues are saved via buildParamControls references
 }
 
 function removeImage(idx) {
   if (images.length <= 1) {
-    // Last image: reset to upload screen
     images.splice(0, 1);
     activeIdx = -1;
     mainLayout.classList.remove('visible');
     uploadZone.style.display = '';
     return;
   }
-
   images.splice(idx, 1);
-
   if (activeIdx === idx) {
     activeIdx = Math.min(idx, images.length - 1);
   } else if (activeIdx > idx) {
     activeIdx--;
   }
-
   buildImageBar();
   switchToImage(activeIdx);
 }
@@ -668,14 +1130,12 @@ $('btnDetect').onclick = () => {
   const s = A();
   if (!s || !s.imgRGBA) return;
   showLoading('Detectando regiones...');
-
   saveCurrentUIState();
 
   const params = { ...s.paramValues };
   params._pre_blur = s.preBlur;
   params._label_smooth = s.labelSmooth;
 
-  // Copy pixel data for transfer
   const rgbaCopy = new Uint8Array(s.imgRGBA.length);
   rgbaCopy.set(s.imgRGBA);
 
@@ -759,7 +1219,6 @@ function renderView(highlightId) {
 
   ctx.putImageData(imgData, 0, 0);
 
-  // Draw region numbers on canvas
   if ($('chkShowNumbers').checked && s.regions.length > 0 && highlightId == null) {
     drawRegionNumbers(s);
   }
@@ -785,7 +1244,6 @@ function renderHighlightOverlay(highlightId) {
   }
   ctx.putImageData(imgData, 0, 0);
 
-  // Show the number of the highlighted region
   if ($('chkShowNumbers').checked) {
     const idx = s.regions.findIndex(r => r.id === highlightId);
     if (idx >= 0) {
@@ -797,9 +1255,15 @@ function renderHighlightOverlay(highlightId) {
   }
 }
 
-function drawRegionNumbers(s) {
-  const scale = Math.max(12, Math.min(24, s.imgWidth / 30));
+function zoomAwareScale(imgW) {
+  // Keep labels ~16-22px on screen regardless of zoom.
+  // Cap canvas pixels at imgW/6 so they never swamp the image at low zoom.
+  const targetScreen = Math.max(14, Math.min(22, imgW / 28));
+  return Math.max(4, Math.min(imgW / 6, targetScreen / zoomLevel));
+}
 
+function drawRegionNumbers(s) {
+  const scale = zoomAwareScale(s.imgWidth);
   s.regions.forEach((r, idx) => {
     const cx = (r.bbox[0] + r.bbox[2]) / 2;
     const cy = (r.bbox[1] + r.bbox[3]) / 2;
@@ -808,17 +1272,16 @@ function drawRegionNumbers(s) {
 }
 
 function drawNumberLabel(idx, cx, cy, imgW, scale) {
-  if (!scale) scale = Math.max(12, Math.min(24, imgW / 30));
+  if (!scale) scale = zoomAwareScale(imgW);
   const text = '#' + idx;
 
   ctx.font = 'bold ' + scale + 'px "Segoe UI", sans-serif';
   const metrics = ctx.measureText(text);
   const tw = metrics.width;
   const th = scale;
-  const pad = scale * 0.3;
+  const pad = scale * 0.35;
 
-  // Background pill
-  ctx.fillStyle = 'rgba(0,0,0,0.75)';
+  ctx.fillStyle = 'rgba(0,0,0,0.8)';
   const rx = cx - tw / 2 - pad;
   const ry = cy - th / 2 - pad;
   const rw = tw + pad * 2;
@@ -828,15 +1291,13 @@ function drawNumberLabel(idx, cx, cy, imgW, scale) {
   ctx.roundRect(rx, ry, rw, rh, br);
   ctx.fill();
 
-  // Border
   const hue = regionColor(idx);
   ctx.strokeStyle = `rgb(${hue[0]},${hue[1]},${hue[2]})`;
-  ctx.lineWidth = Math.max(1, scale / 8);
+  ctx.lineWidth = Math.max(1.5, scale / 10);
   ctx.beginPath();
   ctx.roundRect(rx, ry, rw, rh, br);
   ctx.stroke();
 
-  // Text
   ctx.fillStyle = '#fff';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -873,10 +1334,11 @@ function buildRegionList() {
       <span class="area-pct">${pct}%</span>
       <input type="range" min="0" max="255" value="${r.height}" class="h-slider" style="accent-color:rgb(${hue[0]},${hue[1]},${hue[2]})">
       <div class="swatch h-swatch" style="background:rgb(${r.height},${r.height},${r.height})"></div>
+      <button class="step-btn minus-btn" title="−1">−</button>
       <input type="number" min="0" max="255" value="${r.height}" class="h-num">
+      <button class="step-btn plus-btn" title="+1">+</button>
     `;
 
-    // Events
     row.onmouseenter = () => {
       s.hoveredId = r.id;
       row.classList.add('hovered');
@@ -888,14 +1350,12 @@ function buildRegionList() {
       renderView();
     };
     row.onclick = (e) => {
-      if (!s.mergeMode || e.target.tagName === 'INPUT') return;
+      if (!s.mergeMode || e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
       const idx2 = s.mergeSelection.indexOf(r.id);
       if (idx2 >= 0) {
-        // Deselect
         s.mergeSelection.splice(idx2, 1);
         row.classList.remove('merge-selected');
       } else {
-        // Select
         s.mergeSelection.push(r.id);
         row.classList.add('merge-selected');
       }
@@ -906,21 +1366,27 @@ function buildRegionList() {
     const slider = row.querySelector('.h-slider');
     const numInput = row.querySelector('.h-num');
     const hSwatch = row.querySelector('.h-swatch');
+    const minusBtn = row.querySelector('.minus-btn');
+    const plusBtn = row.querySelector('.plus-btn');
 
-    slider.oninput = () => {
-      const v = parseInt(slider.value);
+    function setHeight(v) {
+      v = Math.max(0, Math.min(255, v));
       r.height = v;
+      slider.value = v;
       numInput.value = v;
       hSwatch.style.background = `rgb(${v},${v},${v})`;
       if (s.viewMode === 'heightmap') debouncedRender();
-    };
+    }
+
+    slider.oninput = () => setHeight(parseInt(slider.value));
+    slider.onmouseup = () => { /* undo push handled by numInput.onchange or blur */ };
     numInput.onchange = () => {
-      const v = Math.max(0, Math.min(255, parseInt(numInput.value) || 0));
-      r.height = v;
-      slider.value = v;
-      hSwatch.style.background = `rgb(${v},${v},${v})`;
+      pushUndo();
+      setHeight(parseInt(numInput.value) || 0);
       if (s.viewMode === 'heightmap') renderView();
     };
+    minusBtn.onclick = (e) => { e.stopPropagation(); pushUndo(); setHeight(r.height - 1); if (s.viewMode === 'heightmap') renderView(); };
+    plusBtn.onclick = (e) => { e.stopPropagation(); pushUndo(); setHeight(r.height + 1); if (s.viewMode === 'heightmap') renderView(); };
 
     frag.appendChild(row);
   });
@@ -937,7 +1403,8 @@ function doMergeMultiple(ids) {
   const s = A();
   if (!s || ids.length < 2) return;
 
-  // Keep the region with the smallest id
+  pushUndo(); // save before merge
+
   ids.sort((a, b) => a - b);
   const keepId = ids[0];
   const removeIds = new Set(ids.slice(1));
@@ -945,7 +1412,6 @@ function doMergeMultiple(ids) {
   const keep = s.regions.find(r => r.id === keepId);
   if (!keep) return;
 
-  // Accumulate stats from all regions being merged in
   let totalPx = keep.pixelCount;
   let sumR = keep.color[0] * keep.pixelCount;
   let sumG = keep.color[1] * keep.pixelCount;
@@ -963,13 +1429,11 @@ function doMergeMultiple(ids) {
   keep.color = [(sumR / totalPx) | 0, (sumG / totalPx) | 0, (sumB / totalPx) | 0];
   keep.pixelCount = totalPx;
 
-  // Update label map
   const n = s.imgWidth * s.imgHeight;
   for (let i = 0; i < n; i++) {
     if (removeIds.has(s.labelMap[i])) s.labelMap[i] = keepId;
   }
 
-  // Remove merged regions
   s.regions = s.regions.filter(r => !removeIds.has(r.id));
 
   s.mergeMode = false;
@@ -999,7 +1463,6 @@ $('tabBar').onclick = e => {
 function setActiveTab(mode) {
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.mode === mode));
 }
-
 function showRegionTabs() {
   $('tabRegions').style.display = '';
   $('tabHeightmap').style.display = '';
@@ -1009,7 +1472,6 @@ function hideRegionTabs() {
   $('tabHeightmap').style.display = 'none';
 }
 
-// Processor selection
 $('procSelect').onchange = () => {
   const s = A();
   if (s) {
@@ -1037,18 +1499,51 @@ function buildParamControls(s) {
     div.className = 'ctrl';
 
     if (p.type === 'range') {
+      // Determine decimal precision from step
+      const stepDecimals = (p.step.toString().split('.')[1] || '').length;
+      function roundStep(v) {
+        return parseFloat(Math.max(p.min, Math.min(p.max, v)).toFixed(stepDecimals));
+      }
+
       div.innerHTML = `
         <label>${p.label}</label>
+        <button class="ctrl-sb" data-dir="-1">−</button>
         <input type="range" min="${p.min}" max="${p.max}" step="${p.step}" value="${currentVal}" data-key="${p.key}">
-        <span class="val">${currentVal}</span>
+        <button class="ctrl-sb" data-dir="1">+</button>
+        <input type="number" class="ctrl-num" min="${p.min}" max="${p.max}" step="${p.step}" value="${currentVal}">
+        ${p.showPx ? '<span class="ctrl-px-hint"></span>' : ''}
       `;
-      const inp = div.querySelector('input');
-      const val = div.querySelector('.val');
-      inp.oninput = () => {
-        const v = parseFloat(inp.value);
+
+      const slider  = div.querySelector('input[type=range]');
+      const numInp  = div.querySelector('input[type=number]');
+      const pxHint  = p.showPx ? div.querySelector('.ctrl-px-hint') : null;
+      const [btnMinus, btnPlus] = div.querySelectorAll('.ctrl-sb');
+
+      function updatePxHint(v) {
+        if (!pxHint || !s) return;
+        const px = Math.max(1, Math.round(s.imgWidth * s.imgHeight * v / 100));
+        const pxStr = px >= 1000 ? (px / 1000).toFixed(1) + 'k' : px;
+        pxHint.textContent = '≥ ' + pxStr + ' px con la imagen actual';
+      }
+
+      function applyVal(v) {
+        v = roundStep(v);
+        slider.value = v;
+        numInp.value = v;
         if (s) s.paramValues[p.key] = v;
-        val.textContent = inp.value;
+        updatePxHint(v);
+      }
+
+      updatePxHint(currentVal);
+
+      slider.oninput = () => applyVal(parseFloat(slider.value));
+      numInp.onchange = () => applyVal(parseFloat(numInp.value) || p.min);
+      numInp.oninput = () => {
+        const v = parseFloat(numInp.value);
+        if (!isNaN(v)) { slider.value = roundStep(v); updatePxHint(roundStep(v)); if (s) s.paramValues[p.key] = roundStep(v); }
       };
+      btnMinus.onclick = () => applyVal(roundStep((s ? s.paramValues[p.key] ?? currentVal : currentVal) - p.step));
+      btnPlus.onclick  = () => applyVal(roundStep((s ? s.paramValues[p.key] ?? currentVal : currentVal) + p.step));
     } else if (p.type === 'select') {
       div.innerHTML = `
         <label>${p.label}</label>
@@ -1070,6 +1565,7 @@ function buildParamControls(s) {
 document.querySelector('.presets').onclick = e => {
   const btn = e.target.closest('[data-preset]');
   if (!btn) return;
+  pushUndo();
   applyPreset(btn.dataset.preset);
 };
 
@@ -1102,7 +1598,7 @@ function applyPreset(mode) {
   if (s.viewMode === 'heightmap') renderView();
 }
 
-// Merge mode toggle
+// Merge mode
 $('btnMerge').onclick = () => {
   const s = A();
   if (!s) return;
@@ -1113,13 +1609,11 @@ $('btnMerge').onclick = () => {
   $('btnDoMerge').disabled = true;
   document.querySelectorAll('.merge-selected').forEach(el => el.classList.remove('merge-selected'));
 };
-// Execute merge
 $('btnDoMerge').onclick = () => {
   const s = A();
   if (!s || s.mergeSelection.length < 2) return;
   doMergeMultiple([...s.mergeSelection]);
 };
-// Cancel merge
 $('btnCancelMerge').onclick = () => {
   const s = A();
   if (!s) return;
@@ -1129,12 +1623,10 @@ $('btnCancelMerge').onclick = () => {
   document.querySelectorAll('.merge-selected').forEach(el => el.classList.remove('merge-selected'));
 };
 
-// Remove current image
 $('btnRemoveImage').onclick = () => {
   if (activeIdx >= 0) removeImage(activeIdx);
 };
 
-// Show numbers toggle
 $('chkShowNumbers').onchange = () => renderView();
 
 // Download heightmap
@@ -1172,20 +1664,45 @@ $('btnDownload').onclick = () => {
   }, 'image/png');
 };
 
-// Preprocessing slider feedback
-['_pre_blur', '_label_smooth'].forEach(key => {
-  const inp = $('param_' + key);
-  if (inp) {
-    inp.oninput = () => {
-      $('val_' + key).textContent = inp.value;
-      const s = A();
-      if (s) {
-        if (key === '_pre_blur') s.preBlur = parseInt(inp.value) || 0;
-        else s.labelSmooth = parseInt(inp.value) || 0;
-      }
-    };
+// ─── Preprocessing sliders: pre_blur & label_smooth ───
+function makeFixedSlider(sliderId, numId, minusBtnId, plusBtnId, min, max, step, getter, setter) {
+  const slider   = $(sliderId);
+  const numInp   = $(numId);
+  const btnMinus = $(minusBtnId);
+  const btnPlus  = $(plusBtnId);
+  const decimals = (step.toString().split('.')[1] || '').length;
+
+  function clamp(v) { return parseFloat(Math.max(min, Math.min(max, v)).toFixed(decimals)); }
+
+  function apply(v) {
+    v = clamp(v);
+    slider.value  = v;
+    numInp.value  = v;
+    setter(v);
   }
-});
+
+  slider.oninput  = () => apply(parseFloat(slider.value));
+  numInp.onchange = () => apply(parseFloat(numInp.value) || min);
+  numInp.oninput  = () => {
+    const v = parseFloat(numInp.value);
+    if (!isNaN(v)) { slider.value = clamp(v); setter(clamp(v)); }
+  };
+  btnMinus.onclick = () => apply(clamp(getter() - step));
+  btnPlus.onclick  = () => apply(clamp(getter() + step));
+}
+
+makeFixedSlider(
+  'param__pre_blur', 'num__pre_blur', 'sb__pre_blur_minus', 'sb__pre_blur_plus',
+  0, 9, 1,
+  () => { const s = A(); return s ? s.preBlur : 3; },
+  v  => { const s = A(); if (s) s.preBlur = v; }
+);
+makeFixedSlider(
+  'param__label_smooth', 'num__label_smooth', 'sb__label_smooth_minus', 'sb__label_smooth_plus',
+  0, 15, 1,
+  () => { const s = A(); return s ? s.labelSmooth : 5; },
+  v  => { const s = A(); if (s) s.labelSmooth = v; }
+);
 
 // ═══════════════════════════════════════════════════════════════
 // HELPERS
@@ -1236,6 +1753,7 @@ function toast(msg) {
 // INIT
 // ═══════════════════════════════════════════════════════════════
 buildParamControls(null);
+updateUndoBtn();
 </script>
 </body>
 </html>

@@ -24,25 +24,25 @@ class ColorClusterProcessor(BaseProcessor):
                 "key": "tolerance",
                 "label": "Tolerancia de color",
                 "type": "slider",
-                "min": 5, "max": 80, "step": 1,
-                "default": 35,
-                "hint": "Diferencia RGB máxima para agrupar colores"
+                "min": 1, "max": 120, "step": 1,
+                "default": 30,
+                "hint": "Diferencia RGB máxima para agrupar colores similares en un mismo cluster"
             },
             {
                 "key": "min_region_pct",
                 "label": "Región mínima (%)",
                 "type": "slider",
-                "min": 0.1, "max": 5.0, "step": 0.1,
-                "default": 0.5,
-                "hint": "Descarta colores menores a este % de la imagen"
+                "min": 0.01, "max": 10.0, "step": 0.01,
+                "default": 0.3,
+                "hint": "Descarta colores que representen menos de este % de la imagen"
             },
             {
                 "key": "max_samples",
                 "label": "Muestras para detección",
                 "type": "number",
-                "min": 5000, "max": 100000, "step": 5000,
+                "min": 1000, "max": 200000, "step": 1000,
                 "default": 30000,
-                "hint": "Más muestras = más preciso pero más lento"
+                "hint": "Más muestras = más preciso pero más lento. Sube a 100k+ para imágenes con muchos colores sutiles"
             },
         ]
 
