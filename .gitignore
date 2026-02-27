@@ -1,4 +1,4 @@
 ./__pycache__/
 ./processors/__pycache__/
-#Ignore all nested __pycache__ folders
 *.pyc
+./node_modules/
