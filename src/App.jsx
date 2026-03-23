@@ -300,6 +300,8 @@ export default function App() {
   const mergeSelRef = useRef([])
   const mergeModeRef = useRef(false)
   const activeRef = useRef(null)
+  const boxSelRef = useRef(null)       // { sx, sy, ex, ey } viewport-relative coords
+  const boxElRef = useRef(null)        // DOM element for the selection rectangle
 
   const { images, activeIdx } = st
   const active = activeIdx >= 0 ? images[activeIdx] : null
@@ -451,6 +453,8 @@ export default function App() {
     const vp = viewportRef.current; if (!vp) return
     const down = (e) => {
       if (e.button !== 0) return
+      // Shift+drag in merge mode → box select, don't pan
+      if (e.shiftKey && mergeModeRef.current) return
       dragRef.current = { active: true, sx: e.clientX, sy: e.clientY, px: zoomRef.current.panX, py: zoomRef.current.panY }
       vp.classList.add('dragging')
     }
@@ -467,12 +471,29 @@ export default function App() {
     return () => { vp.removeEventListener('mousedown', down); window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up) }
   }, [clampPan, applyZoom])
 
-  // ── Label hover highlight & click-to-merge on canvas ──
+  // ── Label hover highlight & click-to-merge & box select on canvas ──
   useEffect(() => {
     const vp = viewportRef.current; if (!vp) return
     let prevLabelIdx = -1
 
+    // — Hover highlight —
     const onMove = (e) => {
+      // Box select drag in progress
+      if (boxSelRef.current) {
+        const rect = vp.getBoundingClientRect()
+        boxSelRef.current.ex = e.clientX - rect.left
+        boxSelRef.current.ey = e.clientY - rect.top
+        const b = boxSelRef.current, el = boxElRef.current
+        if (el) {
+          const x = Math.min(b.sx, b.ex), y = Math.min(b.sy, b.ey)
+          const w = Math.abs(b.ex - b.sx), h = Math.abs(b.ey - b.sy)
+          el.style.display = 'block'
+          el.style.left = x + 'px'; el.style.top = y + 'px'
+          el.style.width = w + 'px'; el.style.height = h + 'px'
+        }
+        return
+      }
+
       if (dragRef.current.active) return
       const s = activeRef.current
       if (!s?.regions?.length) return
@@ -500,6 +521,7 @@ export default function App() {
       }
     }
 
+    // — Click on label to toggle merge —
     const onClick = (e) => {
       if (!mergeModeRef.current) return
       const d = dragRef.current
@@ -518,9 +540,59 @@ export default function App() {
       }
     }
 
+    // — Box select: Shift+drag in merge mode —
+    const onDown = (e) => {
+      if (e.button !== 0 || !e.shiftKey || !mergeModeRef.current) return
+      const rect = vp.getBoundingClientRect()
+      const mx = e.clientX - rect.left, my = e.clientY - rect.top
+      boxSelRef.current = { sx: mx, sy: my, ex: mx, ey: my }
+      e.preventDefault()
+    }
+
+    const onUp = (e) => {
+      if (!boxSelRef.current) return
+      const b = boxSelRef.current
+      boxSelRef.current = null
+      // Hide rectangle
+      if (boxElRef.current) boxElRef.current.style.display = 'none'
+
+      // Find all label centers inside the box
+      const s = activeRef.current
+      if (!s?.regions?.length) return
+      const { level, panX, panY } = zoomRef.current
+      const x1 = Math.min(b.sx, b.ex), y1 = Math.min(b.sy, b.ey)
+      const x2 = Math.max(b.sx, b.ex), y2 = Math.max(b.sy, b.ey)
+      // Ignore tiny drags (< 8px)
+      if (x2 - x1 < 8 && y2 - y1 < 8) return
+
+      const idsInBox = []
+      for (let i = 0; i < s.regions.length; i++) {
+        const r = s.regions[i]
+        const cx = (r.bbox[0] + r.bbox[2]) / 2 * level + panX
+        const cy = (r.bbox[1] + r.bbox[3]) / 2 * level + panY
+        if (cx >= x1 && cx <= x2 && cy >= y1 && cy <= y2) {
+          idsInBox.push(r.id)
+        }
+      }
+      if (idsInBox.length) {
+        setMergeSelection(prev => {
+          const s = new Set(prev)
+          idsInBox.forEach(id => s.add(id))
+          return [...s]
+        })
+      }
+    }
+
+    vp.addEventListener('mousedown', onDown)
     vp.addEventListener('mousemove', onMove)
     vp.addEventListener('click', onClick)
-    return () => { vp.removeEventListener('mousemove', onMove); vp.removeEventListener('click', onClick) }
+    window.addEventListener('mouseup', onUp)
+    return () => {
+      vp.removeEventListener('mousedown', onDown)
+      vp.removeEventListener('mousemove', onMove)
+      vp.removeEventListener('click', onClick)
+      window.removeEventListener('mouseup', onUp)
+    }
   }, [clampPan, applyZoom])
 
   // ── Touch ──
@@ -780,6 +852,7 @@ export default function App() {
                 </div>
                 {/* Labels overlay — drawn at screen resolution, never blurry */}
                 <canvas ref={labelsCanvasRef} className="labels-overlay" />
+                <div ref={boxElRef} className="box-select" />
               </div>
 
               {/* Info bar */}

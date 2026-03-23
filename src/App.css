@@ -245,6 +245,16 @@ html, body, #root { height: 100%; overflow: hidden; }
   z-index: 2;
 }
 
+/* Box select rectangle */
+.box-select {
+  position: absolute;
+  border: 2px dashed rgba(0,200,120,0.9);
+  background: rgba(0,200,120,0.12);
+  pointer-events: none;
+  z-index: 3;
+  display: none;
+}
+
 /* ─── Loading overlay ─── */
 .loading-overlay {
   position: absolute; inset: 0;
