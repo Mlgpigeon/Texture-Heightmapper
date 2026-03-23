@@ -11,7 +11,7 @@ function makeImageState(filename, imgRGBA, width, height, thumbUrl) {
   PROCESSORS.connected.params.forEach(p => { paramValues[p.key] = p.default })
   return { filename, imgRGBA, imgWidth: width, imgHeight: height, thumbUrl,
     labelMap: null, regions: [], viewMode: 'original', processor: 'connected',
-    paramValues, preBlur: 3, labelSmooth: 5, undoStack: [] }
+    paramValues, preBlur: 3, labelSmooth: 5, undoStack: [], redoStack: [] }
 }
 
 const INIT = { images: [], activeIdx: -1 }
@@ -42,16 +42,30 @@ function reducer(st, a) {
     }
     case 'PUSH_UNDO': {
       const img = imgs[ai]
+      // Store labelMap by reference — it's immutable (replaced, not mutated)
       const snap = { regions: JSON.parse(JSON.stringify(img.regions)),
-        labelMap: img.labelMap ? new Int32Array(img.labelMap) : null }
-      return patchActive({ undoStack: [...img.undoStack, snap].slice(-30) })
+        labelMap: img.labelMap }
+      return patchActive({ undoStack: [...img.undoStack, snap].slice(-20), redoStack: [] })
     }
     case 'UNDO': {
       const img = imgs[ai]
       if (!img.undoStack.length) return st
+      const current = { regions: JSON.parse(JSON.stringify(img.regions)),
+        labelMap: img.labelMap }
       const snap = img.undoStack[img.undoStack.length - 1]
       return patchActive({ regions: snap.regions, labelMap: snap.labelMap,
-        undoStack: img.undoStack.slice(0, -1) })
+        undoStack: img.undoStack.slice(0, -1),
+        redoStack: [...img.redoStack, current].slice(-20) })
+    }
+    case 'REDO': {
+      const img = imgs[ai]
+      if (!img.redoStack.length) return st
+      const current = { regions: JSON.parse(JSON.stringify(img.regions)),
+        labelMap: img.labelMap }
+      const snap = img.redoStack[img.redoStack.length - 1]
+      return patchActive({ regions: snap.regions, labelMap: snap.labelMap,
+        redoStack: img.redoStack.slice(0, -1),
+        undoStack: [...img.undoStack, current].slice(-20) })
     }
     case 'APPLY_PRESET': {
       const img = imgs[ai]
@@ -413,10 +427,23 @@ export default function App() {
   // ── Keyboard shortcuts ──
   useEffect(() => {
     const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'z') {
+        e.preventDefault()
+        dispatch({ type: 'REDO' })
+        toast('Rehacer →')
+        return
+      }
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
         e.preventDefault()
         dispatch({ type: 'UNDO' })
         toast('Deshacer ←')
+        return
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+        e.preventDefault()
+        dispatch({ type: 'REDO' })
+        toast('Rehacer →')
+        return
       }
       if ((e.ctrlKey || e.metaKey) && (e.key === '=' || e.key === '+')) { e.preventDefault(); adjustZoom(.2) }
       if ((e.ctrlKey || e.metaKey) && e.key === '-') { e.preventDefault(); adjustZoom(-.2) }
@@ -790,6 +817,11 @@ export default function App() {
             onClick={() => { dispatch({ type: 'UNDO' }); toast('Deshacer ←') }}>
             <svg viewBox="0 0 16 16" fill="currentColor"><path fillRule="evenodd" d="M8 3a5 5 0 1 1-4.546 2.914.5.5 0 0 0-.908-.417A6 6 0 1 0 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 0-.41-.192L5.23 2.308a.25.25 0 0 0 0 .384l2.36 1.966A.25.25 0 0 0 8 4.466z"/></svg>
             Deshacer
+          </button>
+          <button className="btn-toolbar" disabled={!active || active.redoStack.length === 0}
+            onClick={() => { dispatch({ type: 'REDO' }); toast('Rehacer →') }}>
+            <svg viewBox="0 0 16 16" fill="currentColor"><path fillRule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966a.25.25 0 0 1 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg>
+            Rehacer
           </button>
         </div>
       </header>
