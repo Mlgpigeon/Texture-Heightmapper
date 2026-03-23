@@ -167,21 +167,45 @@ function renderHighlight(ctx, s, highlightId, w, h) {
 
 const LABEL_SIZE = 14 // fixed CSS-pixel font size — never scales with zoom
 
-function drawLabelOverlay(ctx, idx, cx, cy) {
+function drawLabelOverlay(ctx, idx, cx, cy, selected) {
   const scale = LABEL_SIZE
   const text = '#' + idx
   ctx.font = `bold ${scale}px "Segoe UI", sans-serif`
   const tw = ctx.measureText(text).width; const pad = scale * .35
   const rx = cx - tw/2 - pad, ry = cy - scale/2 - pad, rw = tw + pad*2, rh = scale + pad*2, br = scale * .3
-  ctx.fillStyle = 'rgba(0,0,0,0.85)'; ctx.beginPath(); ctx.roundRect(rx, ry, rw, rh, br); ctx.fill()
-  const c = regionColor(idx)
-  ctx.strokeStyle = `rgb(${c[0]},${c[1]},${c[2]})`; ctx.lineWidth = 1.5
-  ctx.beginPath(); ctx.roundRect(rx, ry, rw, rh, br); ctx.stroke()
+  if (selected) {
+    ctx.fillStyle = 'rgba(0,180,100,0.92)'; ctx.beginPath(); ctx.roundRect(rx, ry, rw, rh, br); ctx.fill()
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2
+    ctx.beginPath(); ctx.roundRect(rx, ry, rw, rh, br); ctx.stroke()
+  } else {
+    ctx.fillStyle = 'rgba(0,0,0,0.85)'; ctx.beginPath(); ctx.roundRect(rx, ry, rw, rh, br); ctx.fill()
+    const c = regionColor(idx)
+    ctx.strokeStyle = `rgb(${c[0]},${c[1]},${c[2]})`; ctx.lineWidth = 1.5
+    ctx.beginPath(); ctx.roundRect(rx, ry, rw, rh, br); ctx.stroke()
+  }
   ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
   ctx.fillText(text, cx, cy)
 }
 
-function drawLabelsOnOverlay(overlayCanvas, vp, s, showNumbers, highlightId, zoomLevel, panX, panY) {
+/** Hit-test: returns the region index if (mx, my) in viewport-px falls on a label, else -1 */
+function hitTestLabel(vp, s, showNumbers, zoomLevel, panX, panY, mx, my) {
+  if (!vp || !s?.regions?.length) return -1
+  if (s.viewMode === 'original' || !showNumbers) return -1
+  const vw = vp.clientWidth, vh = vp.clientHeight
+  for (let i = 0; i < s.regions.length; i++) {
+    const r = s.regions[i]
+    const cx = (r.bbox[0] + r.bbox[2]) / 2 * zoomLevel + panX
+    const cy = (r.bbox[1] + r.bbox[3]) / 2 * zoomLevel + panY
+    if (cx < -40 || cx > vw + 40 || cy < -20 || cy > vh + 20) continue
+    const text = '#' + i
+    const tw = text.length * (LABEL_SIZE * 0.62), pad = LABEL_SIZE * .35
+    const rx = cx - tw / 2 - pad, ry = cy - LABEL_SIZE / 2 - pad
+    if (mx >= rx && mx <= rx + tw + pad * 2 && my >= ry && my <= ry + LABEL_SIZE + pad * 2) return i
+  }
+  return -1
+}
+
+function drawLabelsOnOverlay(overlayCanvas, vp, s, showNumbers, highlightId, zoomLevel, panX, panY, mergeSelection) {
   if (!overlayCanvas || !vp) return
   const dpr = window.devicePixelRatio || 1
   const vw = vp.clientWidth, vh = vp.clientHeight
@@ -198,6 +222,8 @@ function drawLabelsOnOverlay(overlayCanvas, vp, s, showNumbers, highlightId, zoo
 
   if (!s?.regions?.length) return
 
+  const selSet = mergeSelection?.length ? new Set(mergeSelection) : null
+
   ctx.save()
   ctx.scale(dpr, dpr)
 
@@ -209,7 +235,7 @@ function drawLabelsOnOverlay(overlayCanvas, vp, s, showNumbers, highlightId, zoo
         const r = s.regions[idx]
         const cx = (r.bbox[0] + r.bbox[2]) / 2 * zoomLevel + panX
         const cy = (r.bbox[1] + r.bbox[3]) / 2 * zoomLevel + panY
-        drawLabelOverlay(ctx, idx, cx, cy)
+        drawLabelOverlay(ctx, idx, cx, cy, selSet?.has(r.id))
       }
     }
     ctx.restore()
@@ -226,7 +252,7 @@ function drawLabelsOnOverlay(overlayCanvas, vp, s, showNumbers, highlightId, zoo
       const r = s.regions[idx]
       const cx = (r.bbox[0] + r.bbox[2]) / 2 * zoomLevel + panX
       const cy = (r.bbox[1] + r.bbox[3]) / 2 * zoomLevel + panY
-      drawLabelOverlay(ctx, idx, cx, cy)
+      drawLabelOverlay(ctx, idx, cx, cy, selSet?.has(r.id))
     }
   } else {
     // Draw all labels that are within the viewport (with margin)
@@ -234,7 +260,7 @@ function drawLabelsOnOverlay(overlayCanvas, vp, s, showNumbers, highlightId, zoo
       const cx = (r.bbox[0] + r.bbox[2]) / 2 * zoomLevel + panX
       const cy = (r.bbox[1] + r.bbox[3]) / 2 * zoomLevel + panY
       if (cx > -40 && cx < vw + 40 && cy > -20 && cy < vh + 20) {
-        drawLabelOverlay(ctx, i, cx, cy)
+        drawLabelOverlay(ctx, i, cx, cy, selSet?.has(r.id))
       }
     })
   }
@@ -271,12 +297,18 @@ export default function App() {
   const dragRef = useRef({ active: false, sx: 0, sy: 0, px: 0, py: 0 })
   const touchRef = useRef({ dist: 0 })
   const resizeDragRef = useRef({ active: false, startX: 0, startWidth: 0 })
+  const mergeSelRef = useRef([])
+  const mergeModeRef = useRef(false)
+  const activeRef = useRef(null)
 
   const { images, activeIdx } = st
   const active = activeIdx >= 0 ? images[activeIdx] : null
 
-  // Keep showNumRef in sync
+  // Keep refs in sync
   useEffect(() => { showNumRef.current = showNumbers }, [showNumbers])
+  useEffect(() => { mergeModeRef.current = mergeMode }, [mergeMode])
+  useEffect(() => { activeRef.current = active })
+  useEffect(() => { mergeSelRef.current = mergeSelection }, [mergeSelection])
 
   // ── Toast helper ──
   const toast = useCallback((msg) => {
@@ -294,17 +326,17 @@ export default function App() {
     const hi = highlightId ?? hoverRef.current
     renderToCanvas(canvasRef.current, s, hi)
     const { level, panX, panY } = zoomRef.current
-    drawLabelsOnOverlay(labelsCanvasRef.current, viewportRef.current, s, showNumbers, hi, level, panX, panY)
+    drawLabelsOnOverlay(labelsCanvasRef.current, viewportRef.current, s, showNumbers, hi, level, panX, panY, mergeSelRef.current)
   }, [images, activeIdx, showNumbers])
 
-  // Re-render when state changes
-  useEffect(() => { renderView() }, [renderView])
+  // Re-render when state changes — also when mergeSelection changes (label highlight)
+  useEffect(() => { renderView() }, [renderView, mergeSelection])
 
   // Re-draw labels when the right panel is resized (viewport changes width)
   useEffect(() => {
     const s = activeIdx >= 0 ? images[activeIdx] : null
     const { level, panX, panY } = zoomRef.current
-    drawLabelsOnOverlay(labelsCanvasRef.current, viewportRef.current, s, showNumbers, hoverRef.current, level, panX, panY)
+    drawLabelsOnOverlay(labelsCanvasRef.current, viewportRef.current, s, showNumbers, hoverRef.current, level, panX, panY, mergeSelRef.current)
   }, [rightWidth, images, activeIdx, showNumbers])
 
   // ── Apply zoom transform ──
@@ -314,7 +346,7 @@ export default function App() {
     setZoomLabel(Math.round(level * 100) + '%')
     // Update labels immediately so they follow pan/zoom without waiting for the debounced render
     const s = activeIdx >= 0 ? images[activeIdx] : null
-    drawLabelsOnOverlay(labelsCanvasRef.current, viewportRef.current, s, showNumRef.current, hoverRef.current, level, panX, panY)
+    drawLabelsOnOverlay(labelsCanvasRef.current, viewportRef.current, s, showNumRef.current, hoverRef.current, level, panX, panY, mergeSelRef.current)
     clearTimeout(renderTimer.current)
     renderTimer.current = setTimeout(() => renderView(), 80)
   }, [renderView, images, activeIdx])
@@ -433,6 +465,62 @@ export default function App() {
     window.addEventListener('mousemove', move)
     window.addEventListener('mouseup', up)
     return () => { vp.removeEventListener('mousedown', down); window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up) }
+  }, [clampPan, applyZoom])
+
+  // ── Label hover highlight & click-to-merge on canvas ──
+  useEffect(() => {
+    const vp = viewportRef.current; if (!vp) return
+    let prevLabelIdx = -1
+
+    const onMove = (e) => {
+      if (dragRef.current.active) return
+      const s = activeRef.current
+      if (!s?.regions?.length) return
+      const rect = vp.getBoundingClientRect()
+      const mx = e.clientX - rect.left, my = e.clientY - rect.top
+      const { level, panX, panY } = zoomRef.current
+      const idx = hitTestLabel(vp, s, showNumRef.current, level, panX, panY, mx, my)
+
+      if (idx === prevLabelIdx) return
+      prevLabelIdx = idx
+
+      if (idx >= 0) {
+        vp.style.cursor = 'pointer'
+        const regionId = s.regions[idx].id
+        hoverRef.current = regionId
+        renderToCanvas(canvasRef.current, s, regionId)
+        drawLabelsOnOverlay(labelsCanvasRef.current, vp, s, showNumRef.current, regionId, level, panX, panY, mergeSelRef.current)
+      } else {
+        vp.style.cursor = ''
+        if (hoverRef.current != null) {
+          hoverRef.current = null
+          renderToCanvas(canvasRef.current, s, null)
+          drawLabelsOnOverlay(labelsCanvasRef.current, vp, s, showNumRef.current, null, level, panX, panY, mergeSelRef.current)
+        }
+      }
+    }
+
+    const onClick = (e) => {
+      if (!mergeModeRef.current) return
+      const d = dragRef.current
+      if (Math.abs(e.clientX - d.sx) > 4 || Math.abs(e.clientY - d.sy) > 4) return
+      const s = activeRef.current
+      if (!s?.regions?.length) return
+      const rect = vp.getBoundingClientRect()
+      const mx = e.clientX - rect.left, my = e.clientY - rect.top
+      const { level, panX, panY } = zoomRef.current
+      const idx = hitTestLabel(vp, s, showNumRef.current, level, panX, panY, mx, my)
+      if (idx >= 0) {
+        setMergeSelection(prev => {
+          const id = s.regions[idx].id
+          return prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+        })
+      }
+    }
+
+    vp.addEventListener('mousemove', onMove)
+    vp.addEventListener('click', onClick)
+    return () => { vp.removeEventListener('mousemove', onMove); vp.removeEventListener('click', onClick) }
   }, [clampPan, applyZoom])
 
   // ── Touch ──
@@ -740,7 +828,7 @@ export default function App() {
                   const { level, panX, panY } = zoomRef.current
                   if (id != null) {
                     renderToCanvas(canvasRef.current, active, id)
-                    drawLabelsOnOverlay(labelsCanvasRef.current, viewportRef.current, active, showNumRef.current, id, level, panX, panY)
+                    drawLabelsOnOverlay(labelsCanvasRef.current, viewportRef.current, active, showNumRef.current, id, level, panX, panY, mergeSelRef.current)
                   } else {
                     renderView()
                   }
