@@ -1,290 +1,12 @@
-import { useReducer, useRef, useEffect, useCallback, useState, memo } from 'react'
-import { PROCESSORS } from './constants'
-import { regionColor, typedArrayToBase64, base64ToInt32Array, imgRGBAtoDataURL } from './utils'
-
-// ═══════════════════════════════════════════════════════════════
-// STATE
-// ═══════════════════════════════════════════════════════════════
-
-function makeImageState(filename, imgRGBA, width, height, thumbUrl) {
-  const paramValues = {}
-  PROCESSORS.connected.params.forEach(p => { paramValues[p.key] = p.default })
-  return { filename, imgRGBA, imgWidth: width, imgHeight: height, thumbUrl,
-    labelMap: null, regions: [], viewMode: 'original', processor: 'connected',
-    paramValues, preBlur: 3, labelSmooth: 5, undoStack: [], redoStack: [] }
-}
-
-const INIT = { images: [], activeIdx: -1 }
-
-function reducer(st, a) {
-  const { images: imgs, activeIdx: ai } = st
-  const patchActive = patch => ({
-    ...st, images: imgs.map((img, i) => i === ai ? { ...img, ...patch } : img)
-  })
-
-  switch (a.type) {
-    case 'ADD_IMAGE': {
-      const ni = [...imgs, a.img]
-      return { images: ni, activeIdx: ni.length - 1 }
-    }
-    case 'REMOVE_IMAGE': {
-      const ni = imgs.filter((_, i) => i !== a.idx)
-      if (!ni.length) return INIT
-      const na = ai === a.idx ? Math.min(a.idx, ni.length - 1)
-        : ai > a.idx ? ai - 1 : ai
-      return { images: ni, activeIdx: na }
-    }
-    case 'SET_ACTIVE': return { ...st, activeIdx: a.idx }
-    case 'PATCH_ACTIVE': return patchActive(a.patch)
-    case 'SET_HEIGHT': {
-      const regions = imgs[ai].regions.map(r => r.id === a.id ? { ...r, height: a.h } : r)
-      return patchActive({ regions })
-    }
-    case 'PUSH_UNDO': {
-      const img = imgs[ai]
-      // Store labelMap by reference — it's immutable (replaced, not mutated)
-      const snap = { regions: JSON.parse(JSON.stringify(img.regions)),
-        labelMap: img.labelMap }
-      return patchActive({ undoStack: [...img.undoStack, snap].slice(-20), redoStack: [] })
-    }
-    case 'UNDO': {
-      const img = imgs[ai]
-      if (!img.undoStack.length) return st
-      const current = { regions: JSON.parse(JSON.stringify(img.regions)),
-        labelMap: img.labelMap }
-      const snap = img.undoStack[img.undoStack.length - 1]
-      return patchActive({ regions: snap.regions, labelMap: snap.labelMap,
-        undoStack: img.undoStack.slice(0, -1),
-        redoStack: [...img.redoStack, current].slice(-20) })
-    }
-    case 'REDO': {
-      const img = imgs[ai]
-      if (!img.redoStack.length) return st
-      const current = { regions: JSON.parse(JSON.stringify(img.regions)),
-        labelMap: img.labelMap }
-      const snap = img.redoStack[img.redoStack.length - 1]
-      return patchActive({ regions: snap.regions, labelMap: snap.labelMap,
-        redoStack: img.redoStack.slice(0, -1),
-        undoStack: [...img.undoStack, current].slice(-20) })
-    }
-    case 'APPLY_PRESET': {
-      const img = imgs[ai]
-      const mode = a.mode
-      const sorted = [...img.regions].sort((a2, b2) => {
-        const la = a2.color[0]*.299 + a2.color[1]*.587 + a2.color[2]*.114
-        const lb = b2.color[0]*.299 + b2.color[1]*.587 + b2.color[2]*.114
-        return la - lb
-      })
-      const rank = {}; sorted.forEach((r, i) => { rank[r.id] = i })
-      const n = img.regions.length
-      const regions = img.regions.map(r => {
-        if (mode === 'flat') return { ...r, height: 128 }
-        if (mode === 'by-area') return r // handled below
-        const t = n > 1 ? rank[r.id] / (n - 1) : .5
-        return { ...r, height: Math.round((mode === 'dark-high' ? 1 - t : t) * 255) }
-      })
-      if (mode === 'by-area') {
-        const bySz = [...img.regions].sort((a2, b2) => b2.pixelCount - a2.pixelCount)
-        const hMap = {}; bySz.forEach((r, i) => { hMap[r.id] = Math.round(i / Math.max(1, n-1) * 255) })
-        return patchActive({ regions: img.regions.map(r => ({ ...r, height: hMap[r.id] })) })
-      }
-      return patchActive({ regions })
-    }
-    case 'MERGE': {
-      const img = imgs[ai]
-      const ids = a.ids.slice().sort((a2, b2) => a2 - b2)
-      const keepId = ids[0]; const rem = new Set(ids.slice(1))
-      const keep = img.regions.find(r => r.id === keepId)
-      if (!keep) return st
-      let px = keep.pixelCount, R = keep.color[0]*px, G = keep.color[1]*px, B = keep.color[2]*px
-      for (const rid of rem) {
-        const r = img.regions.find(r2 => r2.id === rid)
-        if (!r) continue
-        px += r.pixelCount; R += r.color[0]*r.pixelCount; G += r.color[1]*r.pixelCount; B += r.color[2]*r.pixelCount
-      }
-      const lm = new Int32Array(img.labelMap)
-      for (let i = 0; i < lm.length; i++) if (rem.has(lm[i])) lm[i] = keepId
-      const regions = img.regions.filter(r => !rem.has(r.id))
-        .map(r => r.id === keepId ? { ...r, color: [(R/px)|0, (G/px)|0, (B/px)|0], pixelCount: px } : r)
-      return patchActive({ regions, labelMap: lm })
-    }
-    case 'LOAD': return { images: a.images, activeIdx: a.activeIdx }
-    default: return st
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════
-// CANVAS RENDERING — main canvas (pixel data only, no labels)
-// ═══════════════════════════════════════════════════════════════
-
-function renderToCanvas(canvas, s, highlightId) {
-  if (!canvas || !s) return
-  const ctx = canvas.getContext('2d', { willReadFrequently: true })
-  const { imgWidth: w, imgHeight: h } = s
-  const n = w * h
-
-  if (canvas.width !== w) canvas.width = w
-  if (canvas.height !== h) canvas.height = h
-
-  if (s.viewMode === 'original') {
-    ctx.putImageData(new ImageData(new Uint8ClampedArray(s.imgRGBA), w, h), 0, 0)
-    if (highlightId != null && s.labelMap) renderHighlight(ctx, s, highlightId, w, h)
-    return
-  }
-  if (!s.labelMap || !s.regions.length) return
-
-  const imgData = ctx.createImageData(w, h)
-  const data = imgData.data
-  const lm = s.labelMap
-  const maxId = s.regions.reduce((m, r) => Math.max(m, r.id), 0)
-
-  if (s.viewMode === 'regions') {
-    const lutR = new Uint8Array(maxId + 1), lutG = new Uint8Array(maxId + 1), lutB = new Uint8Array(maxId + 1)
-    s.regions.forEach((r, i) => { const c = regionColor(i); lutR[r.id]=c[0]; lutG[r.id]=c[1]; lutB[r.id]=c[2] })
-    if (highlightId != null) {
-      for (let i = 0; i < n; i++) {
-        const p = i<<2; const lab = lm[i]; if (lab < 0) continue
-        if (lab === highlightId) { data[p]=255; data[p+1]=0; data[p+2]=255; data[p+3]=255 }
-        else { data[p]=40; data[p+1]=40; data[p+2]=40; data[p+3]=255 }
-      }
-    } else {
-      for (let i = 0; i < n; i++) {
-        const p = i<<2; const lab = lm[i]; if (lab < 0) continue
-        data[p]=lutR[lab]; data[p+1]=lutG[lab]; data[p+2]=lutB[lab]; data[p+3]=255
-      }
-    }
-  } else if (s.viewMode === 'heightmap') {
-    const lutH = new Uint8Array(maxId + 1).fill(128)
-    s.regions.forEach(r => { lutH[r.id] = r.height })
-    for (let i = 0; i < n; i++) {
-      const p = i<<2; const lab = lm[i]; if (lab < 0) continue
-      const v = lutH[lab]; data[p]=v; data[p+1]=v; data[p+2]=v; data[p+3]=255
-    }
-  }
-  ctx.putImageData(imgData, 0, 0)
-  // Labels are drawn on the overlay canvas — never on the main canvas
-}
-
-function renderHighlight(ctx, s, highlightId, w, h) {
-  const imgData = ctx.createImageData(w, h); const data = imgData.data; const lm = s.labelMap
-  for (let i = 0; i < w*h; i++) {
-    const p = i<<2; const lab = lm[i]; if (lab < 0) continue
-    if (lab === highlightId) { data[p]=255; data[p+1]=0; data[p+2]=255; data[p+3]=255 }
-    else { data[p]=40; data[p+1]=40; data[p+2]=40; data[p+3]=255 }
-  }
-  ctx.putImageData(imgData, 0, 0)
-}
-
-// ═══════════════════════════════════════════════════════════════
-// LABELS OVERLAY — drawn at screen resolution, always crisp
-// ═══════════════════════════════════════════════════════════════
-
-const LABEL_SIZE = 14 // fixed CSS-pixel font size — never scales with zoom
-
-function drawLabelOverlay(ctx, idx, cx, cy, selected) {
-  const scale = LABEL_SIZE
-  const text = '#' + idx
-  ctx.font = `bold ${scale}px "Segoe UI", sans-serif`
-  const tw = ctx.measureText(text).width; const pad = scale * .35
-  const rx = cx - tw/2 - pad, ry = cy - scale/2 - pad, rw = tw + pad*2, rh = scale + pad*2, br = scale * .3
-  if (selected) {
-    ctx.fillStyle = 'rgba(0,180,100,0.92)'; ctx.beginPath(); ctx.roundRect(rx, ry, rw, rh, br); ctx.fill()
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2
-    ctx.beginPath(); ctx.roundRect(rx, ry, rw, rh, br); ctx.stroke()
-  } else {
-    ctx.fillStyle = 'rgba(0,0,0,0.85)'; ctx.beginPath(); ctx.roundRect(rx, ry, rw, rh, br); ctx.fill()
-    const c = regionColor(idx)
-    ctx.strokeStyle = `rgb(${c[0]},${c[1]},${c[2]})`; ctx.lineWidth = 1.5
-    ctx.beginPath(); ctx.roundRect(rx, ry, rw, rh, br); ctx.stroke()
-  }
-  ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-  ctx.fillText(text, cx, cy)
-}
-
-/** Hit-test: returns the region index if (mx, my) in viewport-px falls on a label, else -1 */
-function hitTestLabel(vp, s, showNumbers, zoomLevel, panX, panY, mx, my) {
-  if (!vp || !s?.regions?.length) return -1
-  if (s.viewMode === 'original' || !showNumbers) return -1
-  const vw = vp.clientWidth, vh = vp.clientHeight
-  for (let i = 0; i < s.regions.length; i++) {
-    const r = s.regions[i]
-    const cx = (r.bbox[0] + r.bbox[2]) / 2 * zoomLevel + panX
-    const cy = (r.bbox[1] + r.bbox[3]) / 2 * zoomLevel + panY
-    if (cx < -40 || cx > vw + 40 || cy < -20 || cy > vh + 20) continue
-    const text = '#' + i
-    const tw = text.length * (LABEL_SIZE * 0.62), pad = LABEL_SIZE * .35
-    const rx = cx - tw / 2 - pad, ry = cy - LABEL_SIZE / 2 - pad
-    if (mx >= rx && mx <= rx + tw + pad * 2 && my >= ry && my <= ry + LABEL_SIZE + pad * 2) return i
-  }
-  return -1
-}
-
-function drawLabelsOnOverlay(overlayCanvas, vp, s, showNumbers, highlightId, zoomLevel, panX, panY, mergeSelection) {
-  if (!overlayCanvas || !vp) return
-  const dpr = window.devicePixelRatio || 1
-  const vw = vp.clientWidth, vh = vp.clientHeight
-  if (!vw || !vh) return
-
-  const cw = Math.round(vw * dpr), ch = Math.round(vh * dpr)
-  if (overlayCanvas.width !== cw || overlayCanvas.height !== ch) {
-    overlayCanvas.width = cw; overlayCanvas.height = ch
-    overlayCanvas.style.width = vw + 'px'; overlayCanvas.style.height = vh + 'px'
-  }
-
-  const ctx = overlayCanvas.getContext('2d')
-  ctx.clearRect(0, 0, cw, ch)
-
-  if (!s?.regions?.length) return
-
-  const selSet = mergeSelection?.length ? new Set(mergeSelection) : null
-
-  ctx.save()
-  ctx.scale(dpr, dpr)
-
-  // Original view: only show label for the hovered region
-  if (s.viewMode === 'original') {
-    if (highlightId != null) {
-      const idx = s.regions.findIndex(r => r.id === highlightId)
-      if (idx >= 0) {
-        const r = s.regions[idx]
-        const cx = (r.bbox[0] + r.bbox[2]) / 2 * zoomLevel + panX
-        const cy = (r.bbox[1] + r.bbox[3]) / 2 * zoomLevel + panY
-        drawLabelOverlay(ctx, idx, cx, cy, selSet?.has(r.id))
-      }
-    }
-    ctx.restore()
-    return
-  }
-
-  // Regions / heightmap view
-  if (!showNumbers) { ctx.restore(); return }
-
-  if (highlightId != null) {
-    // Only draw the highlighted region's label
-    const idx = s.regions.findIndex(r => r.id === highlightId)
-    if (idx >= 0) {
-      const r = s.regions[idx]
-      const cx = (r.bbox[0] + r.bbox[2]) / 2 * zoomLevel + panX
-      const cy = (r.bbox[1] + r.bbox[3]) / 2 * zoomLevel + panY
-      drawLabelOverlay(ctx, idx, cx, cy, selSet?.has(r.id))
-    }
-  } else {
-    // Draw all labels that are within the viewport (with margin)
-    s.regions.forEach((r, i) => {
-      const cx = (r.bbox[0] + r.bbox[2]) / 2 * zoomLevel + panX
-      const cy = (r.bbox[1] + r.bbox[3]) / 2 * zoomLevel + panY
-      if (cx > -40 && cx < vw + 40 && cy > -20 && cy < vh + 20) {
-        drawLabelOverlay(ctx, i, cx, cy, selSet?.has(r.id))
-      }
-    })
-  }
-
-  ctx.restore()
-}
-
-// ═══════════════════════════════════════════════════════════════
-// APP
-// ═══════════════════════════════════════════════════════════════
+import { useReducer, useRef, useEffect, useCallback, useState } from 'react'
+import { typedArrayToBase64, base64ToInt32Array, imgRGBAtoDataURL } from './utils'
+import { reducer, INIT, makeImageState } from './reducer'
+import { renderToCanvas } from './canvasRenderer'
+import { hitTestLabel, drawLabelsOnOverlay } from './labelsOverlay'
+import UploadZone from './components/UploadZone'
+import ImageBar from './components/ImageBar'
+import DetectionPanel from './components/DetectionPanel'
+import RegionsPanel from './components/RegionsPanel'
 
 export default function App() {
   const [st, dispatch] = useReducer(reducer, INIT)
@@ -314,8 +36,8 @@ export default function App() {
   const mergeSelRef = useRef([])
   const mergeModeRef = useRef(false)
   const activeRef = useRef(null)
-  const boxSelRef = useRef(null)       // { sx, sy, ex, ey } viewport-relative coords
-  const boxElRef = useRef(null)        // DOM element for the selection rectangle
+  const boxSelRef = useRef(null)
+  const boxElRef = useRef(null)
 
   const { images, activeIdx } = st
   const active = activeIdx >= 0 ? images[activeIdx] : null
@@ -360,7 +82,6 @@ export default function App() {
     const { level, panX, panY } = zoomRef.current
     if (posRef.current) posRef.current.style.transform = `translate(${panX}px,${panY}px) scale(${level})`
     setZoomLabel(Math.round(level * 100) + '%')
-    // Update labels immediately so they follow pan/zoom without waiting for the debounced render
     const s = activeIdx >= 0 ? images[activeIdx] : null
     drawLabelsOnOverlay(labelsCanvasRef.current, viewportRef.current, s, showNumRef.current, hoverRef.current, level, panX, panY, mergeSelRef.current)
     clearTimeout(renderTimer.current)
@@ -833,15 +554,12 @@ export default function App() {
         <div className="main-layout">
           {/* ── Left column ── */}
           <div className="col-left">
-            {/* Image bar */}
             <ImageBar images={images} activeIdx={activeIdx}
               onSwitch={(i) => dispatch({ type: 'SET_ACTIVE', idx: i })}
               onRemove={(i) => dispatch({ type: 'REMOVE_IMAGE', idx: i })}
               onAdd={(files) => files.forEach(loadImageFile)} />
 
-            {/* Canvas area */}
             <div className="canvas-area">
-              {/* Tabs */}
               <div className="tab-bar">
                 {['original', 'regions', 'heightmap'].map(mode => {
                   if (mode !== 'original' && (!active?.regions?.length)) return null
@@ -860,7 +578,6 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Zoom bar */}
               <div className="zoom-bar">
                 <button className="zoom-btn" onClick={() => adjustZoom(-.25)}>−</button>
                 <span className="zoom-label">{zoomLabel}</span>
@@ -871,7 +588,6 @@ export default function App() {
                 </span>
               </div>
 
-              {/* Viewport */}
               <div className="canvas-viewport" ref={viewportRef}>
                 <div className="canvas-positioner" ref={posRef}>
                   <canvas ref={canvasRef} />
@@ -882,19 +598,16 @@ export default function App() {
                     </div>
                   )}
                 </div>
-                {/* Labels overlay — drawn at screen resolution, never blurry */}
                 <canvas ref={labelsCanvasRef} className="labels-overlay" />
                 <div ref={boxElRef} className="box-select" />
               </div>
 
-              {/* Info bar */}
               <div className="canvas-info">
                 <span>{active ? `${active.filename} — ${active.imgWidth}×${active.imgHeight}` : '—'}</span>
                 <span>{active?.regions?.length > 0 ? `${active.regions.length} regiones` : ''}</span>
               </div>
             </div>
 
-            {/* Download button */}
             {active?.regions?.length > 0 && (
               <button className="btn-download" onClick={downloadHeightmap}>
                 ↓ Descargar Heightmap PNG
@@ -948,218 +661,3 @@ export default function App() {
     </div>
   )
 }
-
-// ═══════════════════════════════════════════════════════════════
-// SUB-COMPONENTS
-// ═══════════════════════════════════════════════════════════════
-
-function UploadZone({ onFiles }) {
-  const [drag, setDrag] = useState(false)
-  const fileRef = useRef(null)
-  return (
-    <div className="upload-area">
-      <div className={`upload-zone${drag ? ' dragover' : ''}`}
-        onClick={() => fileRef.current.click()}
-        onDragOver={(e) => { e.preventDefault(); setDrag(true) }}
-        onDragLeave={() => setDrag(false)}
-        onDrop={(e) => {
-          e.preventDefault(); setDrag(false)
-          const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'))
-          if (files.length) onFiles(files)
-        }}>
-        <div className="icon">🖼️</div>
-        <div className="label">Arrastra texturas aquí o haz clic para seleccionar</div>
-        <div className="hint">PNG, JPG — cualquier tamaño · múltiples imágenes · procesamiento 100% local</div>
-      </div>
-      <input ref={fileRef} type="file" accept="image/*" multiple hidden
-        onChange={(e) => { onFiles(Array.from(e.target.files)); e.target.value = '' }} />
-    </div>
-  )
-}
-
-function ImageBar({ images, activeIdx, onSwitch, onRemove, onAdd }) {
-  const ref = useRef(null)
-  return (
-    <div className="image-bar" ref={ref}
-      onDragOver={(e) => { e.preventDefault(); ref.current.style.borderColor = 'var(--accent)' }}
-      onDragLeave={() => { ref.current.style.borderColor = '' }}
-      onDrop={(e) => { e.preventDefault(); ref.current.style.borderColor = ''
-        const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/')); if (files.length) onAdd(files) }}>
-      {images.map((s, i) => (
-        <div key={i} className={`image-thumb${i === activeIdx ? ' active' : ''}`} onClick={() => onSwitch(i)}>
-          <img src={s.thumbUrl} alt={s.filename} />
-          <div className="thumb-label">{s.filename}</div>
-          {s.regions.length > 0 && <div className="thumb-badge">{s.regions.length}</div>}
-          <button className="thumb-close" onClick={(e) => { e.stopPropagation(); onRemove(i) }}>×</button>
-        </div>
-      ))}
-      <label className="add-image-btn" title="Agregar imagen">
-        <span>+</span>
-        <span className="add-label">Agregar</span>
-        <input type="file" accept="image/*" multiple hidden
-          onChange={(e) => { onAdd(Array.from(e.target.files)); e.target.value = '' }} />
-      </label>
-    </div>
-  )
-}
-
-function DetectionPanel({ active, loading, onDetect, onPatch }) {
-  const procKey = active?.processor || 'connected'
-  const proc = PROCESSORS[procKey]
-  const paramValues = active?.paramValues || {}
-
-  const setParam = (key, val) => {
-    onPatch({ paramValues: { ...paramValues, [key]: val } })
-  }
-
-  return (
-    <div className="panel">
-      <div className="panel-title" style={{ marginBottom: '8px' }}>Algoritmo de detección</div>
-      <select className="proc-select" value={procKey}
-        onChange={(e) => onPatch({ processor: e.target.value, paramValues: Object.fromEntries(PROCESSORS[e.target.value].params.map(p => [p.key, p.default])) })}>
-        <option value="connected">Componentes Conectados</option>
-        <option value="color_cluster">Clustering por Color</option>
-      </select>
-      <div className="proc-desc">{proc.desc}</div>
-
-      {proc.params.map(p => (
-        <ParamCtrl key={p.key} p={p} value={paramValues[p.key] ?? p.default}
-          imgPixels={active ? active.imgWidth * active.imgHeight : 0}
-          onChange={(v) => setParam(p.key, v)} />
-      ))}
-
-      <div className="pre-section-label">Preprocesado</div>
-      <SimpleSlider label="Suavizado previo" min={0} max={9} step={1}
-        value={active?.preBlur ?? 3} onChange={(v) => onPatch({ preBlur: v })} />
-      <SimpleSlider label="Suavizado de regiones" min={0} max={15} step={1}
-        value={active?.labelSmooth ?? 5} onChange={(v) => onPatch({ labelSmooth: v })} />
-
-      <button className="btn-primary" style={{ marginTop: '8px' }}
-        disabled={!active || loading} onClick={onDetect}>
-        {loading ? 'Detectando…' : 'Detectar Regiones'}
-      </button>
-    </div>
-  )
-}
-
-function ParamCtrl({ p, value, imgPixels, onChange }) {
-  const dec = (p.step?.toString().split('.')[1] || '').length
-  const round = (v) => parseFloat(Math.max(p.min, Math.min(p.max, v)).toFixed(dec))
-
-  if (p.type === 'select') {
-    return (
-      <div className="ctrl">
-        <label>{p.label}</label>
-        <select value={value} onChange={(e) => onChange(parseInt(e.target.value))}>
-          {p.options.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
-        </select>
-      </div>
-    )
-  }
-
-  const pxHint = p.showPx && imgPixels > 0
-    ? (() => { const px = Math.max(1, Math.round(imgPixels * value / 100)); return '≥ ' + (px >= 1000 ? (px/1000).toFixed(1)+'k' : px) + ' px' })()
-    : null
-
-  return (
-    <>
-      <div className="ctrl">
-        <label>{p.label}</label>
-        <button className="ctrl-sb" onClick={() => onChange(round(value - p.step))}>−</button>
-        <input type="range" min={p.min} max={p.max} step={p.step} value={value}
-          onChange={(e) => onChange(round(parseFloat(e.target.value)))} />
-        <button className="ctrl-sb" onClick={() => onChange(round(value + p.step))}>+</button>
-        <input type="number" className="ctrl-num" min={p.min} max={p.max} step={p.step} value={value}
-          onChange={(e) => onChange(round(parseFloat(e.target.value) || p.min))} />
-      </div>
-      {pxHint && <div className="ctrl-px-hint">{pxHint}</div>}
-    </>
-  )
-}
-
-function SimpleSlider({ label, min, max, step, value, onChange }) {
-  return (
-    <div className="ctrl">
-      <label>{label}</label>
-      <button className="ctrl-sb" onClick={() => onChange(Math.max(min, value - step))}>−</button>
-      <input type="range" min={min} max={max} step={step} value={value}
-        onChange={(e) => onChange(parseInt(e.target.value))} />
-      <button className="ctrl-sb" onClick={() => onChange(Math.min(max, value + step))}>+</button>
-      <input type="number" className="ctrl-num" min={min} max={max} step={step} value={value}
-        onChange={(e) => onChange(Math.max(min, Math.min(max, parseInt(e.target.value) || min)))} />
-    </div>
-  )
-}
-
-function RegionsPanel({ active, perfMs, showNumbers, setShowNumbers, mergeMode, mergeSelection,
-  onToggleMergeMode, onToggleMergeItem, onDoMerge, onCancelMerge, onPreset, onSetHeight, onSetHeightWithUndo, onHover }) {
-  const totalPx = active.regions.reduce((s, r) => s + r.pixelCount, 0)
-  return (
-    <div className="panel">
-      <div className="panel-header">
-        <span className="panel-title">{active.regions.length} regiones</span>
-        {perfMs != null && <span className="perf-badge">{perfMs}ms</span>}
-      </div>
-
-      <div className="toggle-row">
-        <input type="checkbox" id="chkNum" checked={showNumbers} onChange={(e) => setShowNumbers(e.target.checked)} />
-        <label htmlFor="chkNum">Mostrar números en canvas</label>
-      </div>
-
-      {mergeMode && (
-        <div className="merge-bar">
-          <span className="info">{mergeSelection.length} regiones seleccionadas</span>
-          <button className="btn-sm merge-btn-success" disabled={mergeSelection.length < 2} onClick={onDoMerge}>Fusionar</button>
-          <button className="btn-sm" onClick={onCancelMerge}>Cancelar</button>
-        </div>
-      )}
-
-      <div className="presets-row">
-        {[['light-high','Claro↑'],['dark-high','Oscuro↑'],['by-area','Por área'],['flat','Plano']].map(([m, l]) => (
-          <button key={m} className="btn-sm" onClick={() => onPreset(m)}>{l}</button>
-        ))}
-        <div style={{ flex: 1 }} />
-        <button className="btn-sm merge-btn-accent" onClick={onToggleMergeMode}>
-          {mergeMode ? 'Cancelar fusión' : 'Fusionar'}
-        </button>
-      </div>
-
-      <div className="regions-area">
-        {active.regions.map((r, idx) => {
-          const pct = ((r.pixelCount / totalPx) * 100).toFixed(1)
-          const c = regionColor(idx)
-          const sel = mergeSelection.includes(r.id)
-          return (
-            <RegionRow key={r.id} r={r} idx={idx} pct={pct} c={c} sel={sel} mergeMode={mergeMode}
-              onHoverIn={() => onHover(r.id)} onHoverOut={() => onHover(null)}
-              onToggleMerge={() => onToggleMergeItem(r.id)}
-              onSetHeight={(h) => onSetHeight(r.id, h)}
-              onSetHeightWithUndo={(h) => onSetHeightWithUndo(r.id, h)} />
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-const RegionRow = memo(function RegionRow({ r, idx, pct, c, sel, mergeMode, onHoverIn, onHoverOut, onToggleMerge, onSetHeight, onSetHeightWithUndo }) {
-  const grayBg = `rgb(${r.height},${r.height},${r.height})`
-  return (
-    <div className={`region-row${sel ? ' merge-selected' : ''}`}
-      style={{ borderLeftColor: `rgb(${c[0]},${c[1]},${c[2]})` }}
-      onMouseEnter={onHoverIn} onMouseLeave={onHoverOut}
-      onClick={(e) => { if (mergeMode && e.target.tagName !== 'INPUT' && e.target.tagName !== 'BUTTON') onToggleMerge() }}>
-      <span className="region-num" style={{ borderColor: `rgb(${c[0]},${c[1]},${c[2]})` }}>#{idx}</span>
-      <div className="swatch" style={{ background: `rgb(${r.color[0]},${r.color[1]},${r.color[2]})` }} title={`RGB(${r.color.join(',')})`} />
-      <span className="area-pct">{pct}%</span>
-      <input type="range" className="h-slider" min={0} max={255} value={r.height}
-        style={{ accentColor: `rgb(${c[0]},${c[1]},${c[2]})` }}
-        onChange={(e) => onSetHeight(parseInt(e.target.value))} />
-      <div className="swatch" style={{ background: grayBg }} />
-      <button className="step-btn" onClick={(e) => { e.stopPropagation(); onSetHeightWithUndo(r.height - 1) }}>−</button>
-      <input type="number" className="h-num" min={0} max={255} value={r.height}
-        onChange={(e) => onSetHeightWithUndo(parseInt(e.target.value) || 0)} />
-      <button className="step-btn" onClick={(e) => { e.stopPropagation(); onSetHeightWithUndo(r.height + 1) }}>+</button>
-    </div>
-  )
-})
